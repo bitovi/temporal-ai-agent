@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import dotenv from "dotenv";
 import { Connection, Client } from "@temporalio/client";
-import { agentWorkflow } from "./workflows";
+import { agentWorkflow } from "./workflows/workflows";
 import { Config } from "./internals/config";
 import { UsageMetadata } from "@langchain/core/messages";
 

@@ -2,13 +2,13 @@ import {
   compactPromptTemplate,
   observationPromptTemplate,
   thoughtPromptTemplate,
-} from "./internals/prompt";
+} from "./prompts";
 import {
   fetchStructuredTools,
   fetchStructuredToolsAsString,
-} from "./internals/tools";
+} from "../../internals/tools";
 import { StructuredTool } from "langchain";
-import { getChatModel } from "./internals/model";
+import { getChatModel } from "../../internals/model";
 import { UsageMetadata } from "@langchain/core/messages";
 
 type AgentResult = AgentResultTool | AgentResultFinal;

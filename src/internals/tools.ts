@@ -22,7 +22,7 @@ function braveSearch(): StructuredTool {
 
       const result = await fetch(
         `https://api.search.brave.com/res/v1/web/search?${params}`,
-        options,
+        options
       );
       const data = await result.json();
       return JSON.stringify(data);
@@ -37,7 +37,7 @@ function braveSearch(): StructuredTool {
           .optional()
           .describe("Number of results to return. Defaults to 10."),
       }),
-    },
+    }
   );
 }
 
@@ -55,30 +55,30 @@ function fetchWebpage(): StructuredTool {
       schema: z.object({
         url: z.string().describe("The URL of the webpage to fetch."),
       }),
-    },
+    }
   );
 }
 
 export async function enumerateMCPTools(): Promise<StructuredTool[]> {
   // TODO: Make this configurable to add other MCP servers
-  const client = new MultiServerMCPClient({
-    lifeforce: {
-      transport: "sse",
-      url: "https://api.repkam09.com/api/mcp",
-      headers: {
-        Authorization: `Bearer ${Config.LIFEFORCE_MCP_API_KEY}`,
-      },
-    },
-  });
+  // const client = new MultiServerMCPClient({
+  //   lifeforce: {
+  //     transport: "sse",
+  //     url: "https://api.repkam09.com/api/mcp",
+  //     headers: {
+  //       Authorization: `Bearer ${Config.LIFEFORCE_MCP_API_KEY}`,
+  //     },
+  //   },
+  // });
+  // const tools = await client.getTools();
+  // return tools;
 
-  const tools = await client.getTools();
-
-  return tools;
+  return [];
 }
 
 export async function fetchStructuredTools(): Promise<StructuredTool[]> {
   const additional = await enumerateMCPTools();
-  const result = [fetchWebpage(), ...additional];
+  const result = [fetchWebpage(), braveSearch(), ...additional];
 
   console.log("Available tools:", result.length);
 
