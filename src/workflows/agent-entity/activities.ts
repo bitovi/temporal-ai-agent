@@ -56,17 +56,18 @@ export async function thoughtEntity(context: string[]): Promise<AgentResult> {
     ]);
 
     const parsed = response as any;
+    const usage = (response as any).usage_metadata || (response as any).metadata?.usage;
 
     if (parsed.hasOwnProperty("answer")) {
       parsed.__type = "answer";
-      parsed.usage = response.usage_metadata;
+      parsed.usage = usage;
       eventEmitter.emit('bot-event', { type: 'thought', message: parsed.thought });
       eventEmitter.emit('bot-event', { type: 'answer', message: parsed.answer });
     }
 
     if (parsed.hasOwnProperty("action")) {
       parsed.__type = "action";
-      parsed.usage = response.usage_metadata;
+      parsed.usage = usage;
       eventEmitter.emit('bot-event', { type: 'thought', message: parsed.thought });
     }
 
@@ -138,10 +139,11 @@ export async function observationEntity(
       { role: "user", content: formattedPrompt },
     ]);
     content = response.content as string;
+    const usage = (response as any).usage_metadata || (response as any).metadata?.usage;
     eventEmitter.emit('bot-event', { type: 'observation', message: content });
     return {
       observations: content,
-      usage: response.usage_metadata,
+      usage,
     };
   } catch (error) {
     eventEmitter.emit('bot-event', { type: 'error', message: `Observation error: ${(error as Error).message}. Full response: ${content}` });
@@ -165,12 +167,13 @@ export async function compactEntity(
     ]);
 
     content = response.content as string;
+    const usage = (response as any).usage_metadata || (response as any).metadata?.usage;
     eventEmitter.emit('bot-event', { type: 'compact', message: 'Context compacted' });
 
     // Return the latest 3 context entries along with the new compacted context
     return {
       context: [content, ...context.slice(-3)],
-      usage: response.usage_metadata,
+      usage,
     };
   } catch (error) {
     eventEmitter.emit('bot-event', { type: 'error', message: `Compact error: ${(error as Error).message}. Full response: ${content}` });
