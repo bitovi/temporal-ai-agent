@@ -8,9 +8,10 @@ import {
   fetchStructuredToolsAsString,
 } from "../../internals/tools";
 import { StructuredTool } from "langchain";
-import { getChatModel, ThoughtResponseSchema } from "../../internals/model";
+import { getChatModel, ThoughtResponseSchema, truncateContextToTokenLimit } from "../../internals/model";
 import { UsageMetadata } from "@langchain/core/messages";
 import { eventEmitter } from "../../server";
+import { Config } from "../../internals/config";
 
 
 type AgentResult = AgentResultTool | AgentResultFinal;
@@ -47,11 +48,16 @@ export async function thought(
   context: string[],
 ): Promise<AgentResult> {
   try {
+    const limitedContext = truncateContextToTokenLimit(
+      context,
+      Config.MAX_CONTEXT_TOKENS
+    );
+
     const promptTemplate = thoughtPromptTemplate();
     const formattedPrompt = await promptTemplate.format({
       userQuery: query,
       currentDate: new Date().toISOString().split("T")[0],
-      previousSteps: context.join("\n"),
+      previousSteps: limitedContext.join("\n"),
       availableActions: await fetchStructuredToolsAsString(),
     });
 
@@ -140,10 +146,15 @@ export async function observation(
 ): Promise<ObservationResult> {
   let content = '';
   try {
+    const limitedContext = truncateContextToTokenLimit(
+      context,
+      Config.MAX_CONTEXT_TOKENS
+    );
+
     const promptTemplate = observationPromptTemplate();
     const formattedPrompt = await promptTemplate.format({
       userQuery: query,
-      previousSteps: context.join("\n"),
+      previousSteps: limitedContext.join("\n"),
       actionResult: actionResult,
     });
 
@@ -169,10 +180,15 @@ export async function compact(
 ): Promise<CompactionResult> {
   let content = '';
   try {
+    const limitedContext = truncateContextToTokenLimit(
+      context,
+      Config.MAX_CONTEXT_TOKENS
+    );
+
     const compactTemplate = compactPromptTemplate();
     const formattedPrompt = await compactTemplate.format({
       userQuery: query,
-      contextHistory: context.join("\n"),
+      contextHistory: limitedContext.join("\n"),
     });
 
     const model = getChatModel("low");

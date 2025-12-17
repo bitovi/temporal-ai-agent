@@ -60,3 +60,47 @@ export function getChatModel(
     }
   }
 }
+
+export function estimateTokenCount(text: string): number {
+  // For simplicity's sake, rough approximation: ~4 characters per token for English text
+  return Math.ceil(text.length / 4);
+}
+
+export function truncateContextToTokenLimit(
+  context: string[],
+  maxTokens: number
+): string[] {
+  if (context.length === 0) {
+    return context;
+  }
+
+  const contextText = context.join("\n");
+  const totalTokens = estimateTokenCount(contextText);
+
+  if (totalTokens <= maxTokens) {
+    return context;
+  }
+
+  // Start from the end and work backwards, keeping messages until we hit the limit
+  // This could be optimized further by summarizing old messages instead of truncating
+  let truncatedContext: string[] = [];
+  let currentTokens = 0;
+
+  for (let i = context.length - 1; i >= 0; i--) {
+    const message = context[i];
+    const messageTokens = estimateTokenCount(message + "\n");
+    
+    if (currentTokens + messageTokens <= maxTokens) {
+      truncatedContext.unshift(message);
+      currentTokens += messageTokens;
+    } else if (truncatedContext.length === 0) {
+      // Always keep at least one message even if it exceeds the limit
+      truncatedContext.unshift(message);
+      break;
+    } else {
+      break;
+    }
+  }
+
+  return truncatedContext;
+}

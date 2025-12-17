@@ -91,6 +91,20 @@ export class Config {
     return process.env.BRAVE_SEARCH_API_KEY;
   }
 
+  static get MAX_CONTEXT_TOKENS(): number {
+    const value = process.env.MAX_CONTEXT_TOKENS;
+    if (!value) {
+      return 12000;
+    }
+    
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+      throw new Error(`MAX_CONTEXT_TOKENS must be a valid number, got: ${value}`);
+    }
+    
+    return parsed;
+  }
+
   static get TEMPORAL_CLIENT_OPTIONS(): TemporalClientOptions {
     const temporalClientOptions: TemporalClientOptions = {
       address: Config.TEMPORAL_HOST_PORT,
