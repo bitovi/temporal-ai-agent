@@ -12,6 +12,38 @@ import { getChatModel } from "../../internals/model";
 import { UsageMetadata } from "@langchain/core/messages";
 import { eventEmitter } from "./server";
 
+const ThoughtResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    thought: {
+      type: "string",
+    },
+    action: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        name: {
+          type: "string",
+        },
+        reason: {
+          type: "string",
+        },
+        input: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+      required: ["name", "reason", "input"],
+    },
+    answer: {
+      type: "string",
+    },
+  },
+  required: ["thought"],
+};
+
+
 type AgentResult = AgentResultTool | AgentResultFinal;
 type AgentResultTool = {
   __type: "action";
@@ -45,7 +77,6 @@ export async function thought(
   query: string,
   context: string[],
 ): Promise<AgentResult> {
-  let content = '';
   try {
     const promptTemplate = thoughtPromptTemplate();
     const formattedPrompt = await promptTemplate.format({
@@ -55,43 +86,40 @@ export async function thought(
       availableActions: await fetchStructuredToolsAsString(),
     });
 
-    const model = getChatModel("high");
+    const model = getChatModel("high", ThoughtResponseSchema);
     const response = await model.invoke([
       { role: "user", content: formattedPrompt },
     ]);
 
-    content = response.content as string;
-    content = content.trim();
+    const parsed = response as any;
 
-    // Extract JSON from the response
-    const start = content.indexOf('{');
-    const end = content.lastIndexOf('}');
-    if (start === -1 || end === -1 || end <= start) {
-      throw new Error(`No valid JSON found in response: ${content}`);
-    }
-    const jsonStr = content.substring(start, end + 1);
-
-    const parsed = JSON.parse(jsonStr);
-
-    if (parsed.hasOwnProperty("answer")) {
-      parsed.__type = "answer";
-      parsed.usage = response.usage_metadata;
+    // Prioritize answer if both fields are present
+    if (parsed.answer) {
+      const result: AgentResultFinal = {
+        __type: "answer",
+        thought: parsed.thought,
+        answer: parsed.answer,
+        usage: response.usage_metadata,
+      };
+      eventEmitter.emit('bot-event', { type: 'thought', message: parsed.thought });
+      return result;
     }
 
-    if (parsed.hasOwnProperty("action")) {
-      parsed.__type = "action";
-      parsed.usage = response.usage_metadata;
+    if (parsed.action) {
+      const result: AgentResultTool = {
+        __type: "action",
+        thought: parsed.thought,
+        action: parsed.action,
+        usage: response.usage_metadata,
+      };
+      eventEmitter.emit('bot-event', { type: 'thought', message: parsed.thought });
+      return result;
     }
 
-    if (!parsed.hasOwnProperty("__type")) {
-      throw new Error("Parsed agent result does not have a valid __type");
-    }
-
-    eventEmitter.emit('bot-event', { type: 'thought', message: parsed.thought });
-
-    return parsed as AgentResult;
+    throw new Error("Response must contain either 'answer' or 'action' field");
   } catch (error) {
-    eventEmitter.emit('bot-event', { type: 'error', message: `Thought error: ${(error as Error).message}. Full response: ${content}` });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    eventEmitter.emit('bot-event', { type: 'error', message: `Thought error: ${errorMessage}` });
     throw error;
   }
 }

@@ -1,18 +1,27 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { Runnable } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
 import { Config } from "./config";
 
-export function getChatModel(quality: "high" | "low"): BaseChatModel {
+export function getChatModel(
+  quality: "high" | "low",
+  schema?: Record<string, any>,
+): BaseChatModel | Runnable<any, any> {
+  const baseModel = new ChatOpenAI({
+    model:
+      quality === "high"
+        ? Config.OPENAI_HIGH_MODEL
+        : Config.OPENAI_LOW_MODEL,
+    apiKey: Config.OPENAI_API_KEY,
+    streaming: false,
+  });
+
   switch (Config.MODEL_PROVIDER) {
     case "openai": {
-      return new ChatOpenAI({
-        model:
-          quality === "high"
-            ? Config.OPENAI_HIGH_MODEL
-            : Config.OPENAI_LOW_MODEL,
-        apiKey: Config.OPENAI_API_KEY,
-        streaming: false,
-      });
+      if (schema) {
+        return baseModel.withStructuredOutput(schema as any, { name: "response" });
+      }
+      return baseModel;
     }
 
     default: {
