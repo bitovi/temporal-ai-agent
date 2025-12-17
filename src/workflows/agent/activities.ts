@@ -102,6 +102,7 @@ export async function thought(
         usage: response.usage_metadata,
       };
       eventEmitter.emit('bot-event', { type: 'thought', message: parsed.thought });
+      eventEmitter.emit('bot-event', { type: 'answer', message: parsed.answer });
       return result;
     }
 
