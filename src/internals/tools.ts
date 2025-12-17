@@ -97,7 +97,7 @@ export async function enumerateMCPTools(): Promise<StructuredTool[]> {
   const tools = await client.getTools();
 
   // 3) lifecycle cleanup
-  await client.close();
+  //await client.close();
 
   return tools;
 }
