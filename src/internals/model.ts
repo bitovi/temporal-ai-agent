@@ -3,6 +3,37 @@ import { Runnable } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
 import { Config } from "./config";
 
+export const ThoughtResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    thought: {
+      type: "string",
+    },
+    action: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        name: {
+          type: "string",
+        },
+        reason: {
+          type: "string",
+        },
+        input: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+      required: ["name", "reason", "input"],
+    },
+    answer: {
+      type: "string",
+    },
+  },
+  required: ["thought"],
+};
+
 export function getChatModel(
   quality: "high" | "low",
   schema?: Record<string, any>,

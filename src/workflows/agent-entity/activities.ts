@@ -8,8 +8,9 @@ import {
   fetchStructuredToolsAsString,
 } from "../../internals/tools";
 import { StructuredTool } from "langchain";
-import { getChatModel } from "../../internals/model";
+import { getChatModel, ThoughtResponseSchema } from "../../internals/model";
 import { UsageMetadata } from "@langchain/core/messages";
+import { eventEmitter } from "../../server";
 
 type AgentResult = AgentResultTool | AgentResultFinal;
 type AgentResultTool = {
@@ -41,35 +42,44 @@ type CompactionResult = {
 };
 
 export async function thoughtEntity(context: string[]): Promise<AgentResult> {
-  const promptTemplate = thoughtPromptTemplate();
-  const formattedPrompt = await promptTemplate.format({
-    currentDate: new Date().toISOString().split("T")[0],
-    previousSteps: context.join("\n"),
-    availableActions: await fetchStructuredToolsAsString(),
-  });
+  try {
+    const promptTemplate = thoughtPromptTemplate();
+    const formattedPrompt = await promptTemplate.format({
+      currentDate: new Date().toISOString().split("T")[0],
+      previousSteps: context.join("\n"),
+      availableActions: await fetchStructuredToolsAsString(),
+    });
 
-  const model = getChatModel("high");
-  const response = await model.invoke([
-    { role: "user", content: formattedPrompt },
-  ]);
+    const model = getChatModel("high", ThoughtResponseSchema);
+    const response = await model.invoke([
+      { role: "user", content: formattedPrompt },
+    ]);
 
-  const parsed = JSON.parse(response.content as string);
+    const parsed = response as any;
 
-  if (parsed.hasOwnProperty("answer")) {
-    parsed.__type = "answer";
-    parsed.usage = response.usage_metadata;
+    if (parsed.hasOwnProperty("answer")) {
+      parsed.__type = "answer";
+      parsed.usage = response.usage_metadata;
+      eventEmitter.emit('bot-event', { type: 'thought', message: parsed.thought });
+      eventEmitter.emit('bot-event', { type: 'answer', message: parsed.answer });
+    }
+
+    if (parsed.hasOwnProperty("action")) {
+      parsed.__type = "action";
+      parsed.usage = response.usage_metadata;
+      eventEmitter.emit('bot-event', { type: 'thought', message: parsed.thought });
+    }
+
+    if (!parsed.hasOwnProperty("__type")) {
+      throw new Error("Parsed agent result does not have a valid __type");
+    }
+
+    return parsed as AgentResult;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    eventEmitter.emit('bot-event', { type: 'error', message: `Thought error: ${errorMessage}` });
+    throw error;
   }
-
-  if (parsed.hasOwnProperty("action")) {
-    parsed.__type = "action";
-    parsed.usage = response.usage_metadata;
-  }
-
-  if (!parsed.hasOwnProperty("__type")) {
-    throw new Error("Parsed agent result does not have a valid __type");
-  }
-
-  return parsed as AgentResult;
 }
 
 export async function actionEntity(
@@ -84,11 +94,14 @@ export async function actionEntity(
 
       console.log(`Invoked tool ${toolName}`);
 
+      eventEmitter.emit('bot-event', { type: 'action', message: `Invoked tool ${toolName} with input ${JSON.stringify(input)}` });
+
       return result as string;
     } catch (err: unknown) {
       console.error(`Error invoking tool ${toolName}:`, err);
 
       const error = err as Error;
+      eventEmitter.emit('bot-event', { type: 'error', message: `Error invoking tool ${toolName}: ${error.message}` });
       return JSON.stringify({
         name: toolName,
         input: input,
@@ -98,6 +111,8 @@ export async function actionEntity(
   }
 
   console.warn(`Tool with name ${toolName} not found.`);
+
+  eventEmitter.emit('bot-event', { type: 'error', message: `Tool with name ${toolName} not found.` });
 
   return JSON.stringify({
     name: toolName,
@@ -110,40 +125,57 @@ export async function observationEntity(
   context: string[],
   actionResult: string
 ): Promise<ObservationResult> {
-  const promptTemplate = observationPromptTemplate();
-  const formattedPrompt = await promptTemplate.format({
-    previousSteps: context.join("\n"),
-    actionResult: actionResult,
-  });
+  let content = '';
+  try {
+    const promptTemplate = observationPromptTemplate();
+    const formattedPrompt = await promptTemplate.format({
+      previousSteps: context.join("\n"),
+      actionResult: actionResult,
+    });
 
-  const model = getChatModel("low");
-  const response = await model.invoke([
-    { role: "user", content: formattedPrompt },
-  ]);
-  return {
-    observations: response.content as string,
-    usage: response.usage_metadata,
-  };
+    const model = getChatModel("low");
+    const response = await model.invoke([
+      { role: "user", content: formattedPrompt },
+    ]);
+    content = response.content as string;
+    eventEmitter.emit('bot-event', { type: 'observation', message: content });
+    return {
+      observations: content,
+      usage: response.usage_metadata,
+    };
+  } catch (error) {
+    eventEmitter.emit('bot-event', { type: 'error', message: `Observation error: ${(error as Error).message}. Full response: ${content}` });
+    throw error;
+  }
 }
 
 export async function compactEntity(
   context: string[]
 ): Promise<CompactionResult> {
-  const compactTemplate = compactPromptTemplate();
-  const formattedPrompt = await compactTemplate.format({
-    contextHistory: context.join("\n"),
-  });
+  let content = '';
+  try {
+    const compactTemplate = compactPromptTemplate();
+    const formattedPrompt = await compactTemplate.format({
+      contextHistory: context.join("\n"),
+    });
 
-  const model = getChatModel("low");
-  const response = await model.invoke([
-    { role: "user", content: formattedPrompt },
-  ]);
+    const model = getChatModel("low");
+    const response = await model.invoke([
+      { role: "user", content: formattedPrompt },
+    ]);
 
-  // Return the latest 3 context entries along with the new compacted context
-  return {
-    context: [response.content as string, ...context.slice(-3)],
-    usage: response.usage_metadata,
-  };
+    content = response.content as string;
+    eventEmitter.emit('bot-event', { type: 'compact', message: 'Context compacted' });
+
+    // Return the latest 3 context entries along with the new compacted context
+    return {
+      context: [content, ...context.slice(-3)],
+      usage: response.usage_metadata,
+    };
+  } catch (error) {
+    eventEmitter.emit('bot-event', { type: 'error', message: `Compact error: ${(error as Error).message}. Full response: ${content}` });
+    throw error;
+  }
 }
 
 type WorkflowMessage =

@@ -8,40 +8,9 @@ import {
   fetchStructuredToolsAsString,
 } from "../../internals/tools";
 import { StructuredTool } from "langchain";
-import { getChatModel } from "../../internals/model";
+import { getChatModel, ThoughtResponseSchema } from "../../internals/model";
 import { UsageMetadata } from "@langchain/core/messages";
-import { eventEmitter } from "./server";
-
-const ThoughtResponseSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    thought: {
-      type: "string",
-    },
-    action: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        name: {
-          type: "string",
-        },
-        reason: {
-          type: "string",
-        },
-        input: {
-          type: "object",
-          additionalProperties: true,
-        },
-      },
-      required: ["name", "reason", "input"],
-    },
-    answer: {
-      type: "string",
-    },
-  },
-  required: ["thought"],
-};
+import { eventEmitter } from "../../server";
 
 
 type AgentResult = AgentResultTool | AgentResultFinal;
