@@ -15,20 +15,20 @@ Instructions:
 3. Respond in the following JSON format:
 
 If you need to use a tool:
-{{
+{
     "thought": "Your detailed reasoning about what to do next",
-    "action": {{
+    "action": {
         "name": "Tool name",
         "reason": "Explanation of why you chose this tool",
         "input": "JSON object matching to tool input schema"
-    }}
-}}
+    }
+}
 
 If you have enough information to answer the query:
-{{
+{
     "thought": "Your final reasoning process",
     "answer": "Your comprehensive answer to the query"
-}}
+}
 
 Remember:
 - Be thorough in your reasoning.
@@ -53,7 +53,8 @@ Based on that information, provide your thought process and decide on the next a
 <available-actions>
 {availableActions}
 </available-actions>
-`;
+
+Return your response as a valid JSON object only, with no additional text, explanations, or formatting outside the JSON.`;
 
   const prompt = new PromptTemplate({
     template: templateString,

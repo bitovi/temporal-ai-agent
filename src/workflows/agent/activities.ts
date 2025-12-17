@@ -57,7 +57,18 @@ export async function thought(
     { role: "user", content: formattedPrompt },
   ]);
 
-  const parsed = JSON.parse(response.content as string);
+  let content = response.content as string;
+  content = content.trim();
+
+  // Extract JSON from the response
+  const start = content.indexOf('{');
+  const end = content.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error(`No valid JSON found in response: ${content}`);
+  }
+  const jsonStr = content.substring(start, end + 1);
+
+  const parsed = JSON.parse(jsonStr);
 
   if (parsed.hasOwnProperty("answer")) {
     parsed.__type = "answer";

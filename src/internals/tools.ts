@@ -2,6 +2,26 @@ import * as z from "zod";
 import { StructuredTool, tool } from "langchain";
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 import { Config } from "./config";
+import * as fs from "fs";
+import * as path from "path";
+import * as yaml from "yaml";
+
+function substituteEnvVars(obj: any): any {
+  if (typeof obj === "string") {
+    return obj.replace(/\$\{([^}]+)\}/g, (match, varName) => {
+      return process.env[varName] || match;
+    });
+  } else if (Array.isArray(obj)) {
+    return obj.map(substituteEnvVars);
+  } else if (obj && typeof obj === "object") {
+    const result: any = {};
+    for (const key in obj) {
+      result[key] = substituteEnvVars(obj[key]);
+    }
+    return result;
+  }
+  return obj;
+}
 
 function braveSearch(): StructuredTool {
   return tool(
@@ -60,20 +80,26 @@ function fetchWebpage(): StructuredTool {
 }
 
 export async function enumerateMCPTools(): Promise<StructuredTool[]> {
-  // TODO: Make this configurable to add other MCP servers
-  // const client = new MultiServerMCPClient({
-  //   lifeforce: {
-  //     transport: "sse",
-  //     url: "https://api.repkam09.com/api/mcp",
-  //     headers: {
-  //       Authorization: `Bearer ${Config.LIFEFORCE_MCP_API_KEY}`,
-  //     },
-  //   },
-  // });
-  // const tools = await client.getTools();
-  // return tools;
+  const configPath = path.join(__dirname, "../../mcp-servers.yaml");
+  const configContent = fs.readFileSync(configPath, "utf-8");
+  const config = yaml.parse(configContent);
 
-  return [];
+  const servers = substituteEnvVars(config.servers);
+
+  const client = new MultiServerMCPClient(servers);
+
+  // 1) optional explicit initialize, if supported
+  if (client.initializeConnections) {
+    await client.initializeConnections();
+  }
+
+  // 2) now get tools
+  const tools = await client.getTools();
+
+  // 3) lifecycle cleanup
+  await client.close();
+
+  return tools;
 }
 
 export async function fetchStructuredTools(): Promise<StructuredTool[]> {

@@ -24,6 +24,7 @@
         "@temporalio/workflow": "^1.13.2",
         "dotenv": "^17.2.3",
         "langchain": "^1.0.4",
+        "yaml": "^2.8.2",
         "zod": "^4.1.12"
     },
     "devDependencies": {
