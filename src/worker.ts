@@ -14,7 +14,7 @@ export async function createWorker() {
     connection,
     namespace: Config.TEMPORAL_NAMESPACE,
     taskQueue: Config.TEMPORAL_TASK_QUEUE,
-    workflowsPath: require.resolve("./workflows/workflows"),
+    workflowsPath: require.resolve("./workflows/workflow"),
     activities,
   });
 

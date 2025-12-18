@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Connection, Client } from '@temporalio/client';
 import dotenv from 'dotenv';
 import { Config } from './internals/config';
-import { agentEntityWorkflow, agentEntityWorkflowMessageSignal, agentEntityWorkflowExitSignal } from './workflows/workflows';
+import { agentEntityWorkflow, agentEntityWorkflowMessageSignal, agentEntityWorkflowExitSignal } from './workflows/workflow';
 
 dotenv.config();
 
@@ -88,6 +88,13 @@ app.post('/api/conversations/:id/exit', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
+});
+
+// POST /api/emit-event - Receive events from worker activities
+app.post('/api/emit-event', (req, res) => {
+  const eventData = req.body;
+  eventEmitter.emit('bot-event', eventData);
+  res.json({ success: true });
 });
 
 app.get('/events', (req, res) => {
