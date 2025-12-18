@@ -14,7 +14,7 @@ If you need to use a tool:
 {{
     "thought": "Your detailed reasoning about what to do next",
     "action": {{
-        "name": "Tool name",
+        "name": "EXACT tool name from the available actions below",
         "reason": "Explanation of why you chose this tool",
         "input": "JSON object matching to tool input schema"
     }}
@@ -26,7 +26,9 @@ If you have enough information to answer the query:
     "answer": "Your comprehensive answer to the query"
 }}
 
-Remember:
+IMPORTANT RULES:
+- When selecting a tool, you MUST use the exact name from the list of available actions below. Never use an empty string or a name not in the available actions list.
+- The "name" field in your action MUST be one of the tool names listed in the <available-actions> section.
 - Be thorough in your reasoning.
 - Use tools when you need more information.
 - Use tools to validate your assumptions and internal knowledge.
@@ -46,6 +48,8 @@ In this thinking step, consider the following information from previous steps:
 </previous-steps>
 
 Based on that information, provide your thought process and decide on the next action.
+
+AVAILABLE TOOLS - Choose the "name" field from one of these exact tool names:
 <available-actions>
 {availableActions}
 </available-actions>
