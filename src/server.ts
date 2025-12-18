@@ -2,8 +2,11 @@ import express from 'express';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'node:crypto';
 import { Connection, Client } from '@temporalio/client';
+import dotenv from 'dotenv';
 import { Config } from './internals/config';
 import { agentEntityWorkflow, agentEntityWorkflowMessageSignal, agentEntityWorkflowExitSignal } from './workflows/workflows';
+
+dotenv.config();
 
 export const eventEmitter = new EventEmitter();
 
@@ -19,8 +22,6 @@ async function initTemporal() {
   connection = await Connection.connect(Config.TEMPORAL_CLIENT_OPTIONS);
   client = new Client({ connection, namespace: Config.TEMPORAL_NAMESPACE });
 }
-
-initTemporal().catch(console.error);
 
 // POST /api/conversations - Start new conversation
 app.post('/api/conversations', async (req, res) => {
@@ -268,3 +269,37 @@ updateConversationSelect();
 });
 
 export default app;
+
+// If this file is run directly, start the server
+if (require.main === module) {
+  async function main() {
+    try {
+      await initTemporal();
+      console.log('Temporal client initialized');
+
+      const PORT = process.env.PORT || 3000;
+      app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+      });
+    } catch (error) {
+      console.error('Failed to start server:', error);
+      process.exit(1);
+    }
+  }
+
+  // Handle graceful shutdown
+  process.on('SIGINT', () => {
+    console.log('\nReceived SIGINT, shutting down gracefully...');
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('\nReceived SIGTERM, shutting down gracefully...');
+    process.exit(0);
+  });
+
+  main().catch((error) => {
+    console.error('Unexpected error starting server:', error);
+    process.exit(1);
+  });
+}

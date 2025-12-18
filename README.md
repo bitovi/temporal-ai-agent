@@ -1,6 +1,6 @@
 # Temporal AI Agent Reference Implementation
 
-This project implements a long running ReAct (Reasoning and Acting) agent using Temporal workflows.
+This project implements a long running ReAct (Reasoning and Acting) agent using Temporal entity workflows.
 
 ## Overview
 
@@ -35,7 +35,9 @@ The agent follows the ReAct pattern to break down complex queries into a series 
 
 4. **Set Up Environment Variables**:
 
-   Copy `.env.example` to `.env` and fill in your OpenAI API key and Temporal server details.
+   Copy `.env.example` to `.env` and fill in your Temporal server details, OpenAI API key, Brave Search API key, and GitHub fine-grained personal access token.
+
+   Check `mcp-servers.yaml` to ensure the MCP servers being used are to your liking. You may add or remove any arbitrary amount of them. If you remove Brave and Github, the API keys are no longer needed.
 
 5. **Run the Worker**:
 
@@ -45,10 +47,20 @@ The agent follows the ReAct pattern to break down complex queries into a series 
    npm run worker
    ```
 
-6. **Start the Workflow**:
-
-   This starts the client that will initiate the ReAct agent workflow.
+6. **Interact with the workflow using a simple GUI**:
 
    ```bash
-   npm run client
+   npm run server
    ```
+
+   This serves a webpage that has several controls for the workflow and a `sse` endpoint to view the agent's thoughts. Using this GUI, you may begin new conversations with the agent, respond to its answers, and eventually end it.
+
+   The webpage is available at http://localhost:3000/ by default.
+
+   If you wish to manually start an entity workflow instead of using the server and webpage, this will start the client that will initiate a sample workflow.
+
+   ```bash
+   npm run client-agent-entity.ts
+   ```
+
+

@@ -8,6 +8,7 @@
         "client:agent-entity": "ts-node src/client-agent-entity.ts",
         "format": "prettier --write \"src/**/*.ts\"",
         "worker": "ts-node src/worker.ts",
+        "server": "ts-node src/server.ts",
         "build": "tsc --noEmit",
         "temporal": "temporal server start-dev"
     },

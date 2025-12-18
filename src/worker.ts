@@ -2,8 +2,6 @@ import dotenv from "dotenv";
 import { NativeConnection, Worker } from "@temporalio/worker";
 import * as activities from "./workflows/activities";
 import { Config } from "./internals/config";
-import app from "./server";
-import { eventEmitter } from "./server";
 
 dotenv.config();
 
@@ -40,10 +38,6 @@ export async function startWorker() {
 if (require.main === module) {
   async function main() {
     try {
-      console.log("Starting server...");
-      app.listen(3000, () => console.log('Server running on port 3000'));
-      eventEmitter.emit('bot-event', { type: 'server', message: 'Server started' });
-      
       console.log("Starting Temporal worker...");
       await startWorker();
     } catch (error) {
