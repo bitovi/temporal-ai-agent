@@ -27,16 +27,6 @@ export class Config {
     return process.env.OPENAI_API_KEY;
   }
 
-  static get LIFEFORCE_MCP_API_KEY(): string {
-    if (!process.env.LIFEFORCE_MCP_API_KEY) {
-      throw new Error(
-        "LIFEFORCE_MCP_API_KEY is not defined in environment variables",
-      );
-    }
-
-    return process.env.LIFEFORCE_MCP_API_KEY;
-  }
-
   /**
    * Returns the OpenAI high-tier model name from environment variables or a default value.
    * This model is intended for more complex tasks requiring greater capabilities and reasoning.
