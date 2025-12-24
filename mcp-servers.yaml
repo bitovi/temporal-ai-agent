@@ -1,10 +1,4 @@
 servers:
-  # lifeforce:
-  #   transport: "sse"
-  #   url: "https://api.repkam09.com/api/mcp"
-  #   headers:
-  #     Authorization: "Bearer ${LIFEFORCE_MCP_API_KEY}"
-
   brave_search:
     transport: "stdio"
     command: "npx"
