@@ -1,6 +1,7 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Runnable } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
+import { encoding_for_model, Tiktoken } from "tiktoken";
 import { Config } from "./config";
 
 export const ThoughtResponseSchema = {
@@ -62,8 +63,14 @@ export function getChatModel(
 }
 
 export function estimateTokenCount(text: string): number {
-  // For simplicity's sake, rough approximation: ~4 characters per token for English text
-  return Math.ceil(text.length / 4);
+  try {
+    const encoding = encoding_for_model(Config.OPENAI_HIGH_MODEL as any);
+    const tokens = encoding.encode(text);
+    return tokens.length;
+  } catch (error) {
+    // Fallback to rough estimation if tiktoken fails
+    return Math.ceil(text.length / 4);
+  }
 }
 
 export function truncateContextToTokenLimit(
