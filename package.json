@@ -4,7 +4,6 @@
     "description": "A ReAct Agent implemented using Temporal and LangChain",
     "main": "src/index.ts",
     "scripts": {
-        "client:agent": "ts-node src/client-agent.ts",
         "client:agent-entity": "ts-node src/client-agent-entity.ts",
         "format": "prettier --write \"src/**/*.ts\"",
         "worker": "ts-node src/worker.ts",
