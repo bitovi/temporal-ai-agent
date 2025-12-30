@@ -1,11 +1,7 @@
 import { PromptTemplate } from "@langchain/core/prompts";
 
 export function thoughtPromptTemplate() {
-  const templateString = `You are a ReAct (Reasoning and Acting) agent tasked with answering the following query:
-
-<user-query>
-{userQuery}
-</user-query>
+  const templateString = `You are a ReAct (Reasoning and Acting) agent tasked with answering user queries.
 
 Your goal is to reason about the query and decide on the best course of action to answer it accurately.
 
@@ -18,7 +14,7 @@ If you need to use a tool:
 {{
     "thought": "Your detailed reasoning about what to do next",
     "action": {{
-        "name": "Tool name",
+        "name": "EXACT tool name from the available actions below",
         "reason": "Explanation of why you chose this tool",
         "input": "JSON object matching to tool input schema"
     }}
@@ -30,7 +26,9 @@ If you have enough information to answer the query:
     "answer": "Your comprehensive answer to the query"
 }}
 
-Remember:
+IMPORTANT RULES:
+- When selecting a tool, you MUST use the exact name from the list of available actions below. Never use an empty string or a name not in the available actions list.
+- The "name" field in your action MUST be one of the tool names listed in the <available-actions> section.
 - Be thorough in your reasoning.
 - Use tools when you need more information.
 - Use tools to validate your assumptions and internal knowledge.
@@ -50,6 +48,8 @@ In this thinking step, consider the following information from previous steps:
 </previous-steps>
 
 Based on that information, provide your thought process and decide on the next action.
+
+AVAILABLE TOOLS - Choose the "name" field from one of these exact tool names:
 <available-actions>
 {availableActions}
 </available-actions>
@@ -57,23 +57,14 @@ Based on that information, provide your thought process and decide on the next a
 
   const prompt = new PromptTemplate({
     template: templateString,
-    inputVariables: [
-      "userQuery",
-      "currentDate",
-      "previousSteps",
-      "availableActions",
-    ],
+    inputVariables: ["currentDate", "previousSteps", "availableActions"],
   });
 
   return prompt;
 }
 
 export function observationPromptTemplate() {
-  const templateString = `You are a ReAct (Reasoning and Acting) agent tasked with answering the following query:
-
-<user-query>
-{userQuery}
-</user-query>
+  const templateString = `You are a ReAct (Reasoning and Acting) agent tasked with answering user queries.
 
 Your goal is to extract insights from the results of your last action and provide a concise observation.
 
@@ -98,7 +89,7 @@ Provide your observation based on the latest action result:
 
   const prompt = new PromptTemplate({
     template: templateString,
-    inputVariables: ["userQuery", "previousSteps", "actionResult"],
+    inputVariables: ["previousSteps", "actionResult"],
   });
 
   return prompt;
@@ -116,12 +107,6 @@ Instructions:
 
 You do not need to include any XML tags such as <thought>, <action>, or <observation> in your response, those will be added automatically by the Agent Workflow.
 
-For reference, here is the oringinal user question that the agent is trying to answer:
-
-<user-query>
-{userQuery}
-</user-query>
-
 Here is the context history to be compacted:
 
 <context-history>
@@ -133,7 +118,7 @@ Provide a compacted version of the context history, preserving important details
 
   const prompt = new PromptTemplate({
     template: templateString,
-    inputVariables: ["userQuery", "contextHistory"],
+    inputVariables: ["contextHistory"],
   });
 
   return prompt;

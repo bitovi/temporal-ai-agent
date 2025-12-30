@@ -4,9 +4,10 @@
     "description": "A ReAct Agent implemented using Temporal and LangChain",
     "main": "src/index.ts",
     "scripts": {
-        "client": "ts-node src/client.ts",
+        "client:agent-entity": "ts-node src/client-agent-entity.ts",
         "format": "prettier --write \"src/**/*.ts\"",
         "worker": "ts-node src/worker.ts",
+        "server": "ts-node src/server.ts",
         "build": "tsc --noEmit",
         "temporal": "temporal server start-dev"
     },
@@ -21,8 +22,12 @@
         "@temporalio/client": "^1.13.2",
         "@temporalio/worker": "^1.13.2",
         "@temporalio/workflow": "^1.13.2",
+        "@types/express": "^5.0.6",
         "dotenv": "^17.2.3",
+        "express": "^5.2.1",
         "langchain": "^1.0.4",
+        "tiktoken": "^1.0.22",
+        "yaml": "^2.8.2",
         "zod": "^4.1.12"
     },
     "devDependencies": {

@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 import { NativeConnection, Worker } from "@temporalio/worker";
-import * as activities from "./activities";
+import * as activities from "./workflows/activities";
 import { Config } from "./internals/config";
 
 dotenv.config();
@@ -14,7 +14,7 @@ export async function createWorker() {
     connection,
     namespace: Config.TEMPORAL_NAMESPACE,
     taskQueue: Config.TEMPORAL_TASK_QUEUE,
-    workflowsPath: require.resolve("./workflows"),
+    workflowsPath: require.resolve("./workflows/workflow"),
     activities,
   });
 
