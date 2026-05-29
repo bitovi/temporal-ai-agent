@@ -84,14 +84,44 @@ export class Config {
   static get MAX_CONTEXT_TOKENS(): number {
     const value = process.env.MAX_CONTEXT_TOKENS;
     if (!value) {
-      return 12000;
+      return 20400;
     }
-    
+
     const parsed = parseInt(value, 10);
     if (isNaN(parsed)) {
-      throw new Error(`MAX_CONTEXT_TOKENS must be a valid number, got: ${value}`);
+      throw new Error(
+        `MAX_CONTEXT_TOKENS must be a valid number, got: ${value}`,
+      );
     }
-    
+
+    return parsed;
+  }
+
+  static get MIN_TOOL_TOKENS(): number {
+    const value = process.env.MIN_TOOL_TOKENS;
+    if (!value) {
+      return 2040;
+    }
+
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+      throw new Error(`MIN_TOOL_TOKENS must be a valid number, got: ${value}`);
+    }
+
+    return parsed;
+  }
+
+  static get MAX_TOOL_TOKENS(): number {
+    const value = process.env.MAX_TOOL_TOKENS;
+    if (!value) {
+      return 128000;
+    }
+
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+      throw new Error(`MAX_TOOL_TOKENS must be a valid number, got: ${value}`);
+    }
+
     return parsed;
   }
 

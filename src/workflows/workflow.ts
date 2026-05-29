@@ -8,26 +8,26 @@ import {
   workflowInfo,
 } from "@temporalio/workflow";
 import type * as activities from "./activities";
-import { UsageMetadata } from "@langchain/core/messages";
+import {
+  AIMessage,
+  MessageFieldWithRole,
+  ToolMessage,
+  UsageMetadata,
+} from "@langchain/core/messages";
 
-const {
-  thoughtEntity,
-  actionEntity,
-  observationEntity,
-  compactEntity,
-  persistEntity,
-} = proxyActivities<typeof activities>({
-  startToCloseTimeout: "1 minute",
-  retry: {
-    backoffCoefficient: 1,
-    initialInterval: "3 seconds",
-    maximumAttempts: 5,
-  },
-});
+const { completion, action, observation, compact, persist, tokens } =
+  proxyActivities<typeof activities>({
+    startToCloseTimeout: "10 minute",
+    retry: {
+      backoffCoefficient: 1,
+      initialInterval: "3 seconds",
+      maximumAttempts: 5,
+    },
+  });
 
 export type AgentEntityWorkflowInput = {
   continueAsNew?: {
-    context: string[];
+    context: MessageFieldWithRole[];
     usage: UsageMetadata[];
     pending: AgentEntityWorkflowMessagePayload[];
   };
@@ -44,13 +44,13 @@ export const agentEntityWorkflowMessageSignal = defineSignal<
 >("agentEntityWorkflowMessage");
 
 export const agentEntityWorkflowExitSignal = defineSignal(
-  "agentEntityWorkflowExit"
+  "agentEntityWorkflowExit",
 );
 
 export async function agentEntityWorkflow(
-  input: AgentEntityWorkflowInput
+  input: AgentEntityWorkflowInput,
 ): Promise<{ usage: UsageMetadata }> {
-  const context: string[] = input.continueAsNew
+  const context: MessageFieldWithRole[] = input.continueAsNew
     ? input.continueAsNew.context
     : [];
   const usage: UsageMetadata[] = input.continueAsNew
@@ -67,7 +67,7 @@ export async function agentEntityWorkflow(
     agentEntityWorkflowMessageSignal,
     (payload: AgentEntityWorkflowMessagePayload) => {
       pending.push(payload);
-    }
+    },
   );
 
   setHandler(agentEntityWorkflowExitSignal, () => {
@@ -90,67 +90,84 @@ export async function agentEntityWorkflow(
           input_tokens: 0,
           output_tokens: 0,
           total_tokens: 0,
-        }
+        },
       );
       return { usage: finalUsage };
     }
 
     while (pending.length > 0) {
-      const persist = pending.map(({ date, message, name }) => ({
+      const entries = pending.map(({ date, message, name }) => ({
         role: "user" as const,
         message,
         date,
         name,
       }));
-      await persistEntity(persist);
+
+      await persist(entries);
 
       const message = pending.shift()!;
-      context.push(
-        `<user_message name="${message.name}" date="${message.date}">\n${message.message}\n</user_message>`
-      );
+      context.push({
+        role: "human",
+        content: message.message,
+        name: message.name,
+      });
     }
 
-    const agentThought = await thoughtEntity(context);
+    const agentThought = await completion(context);
 
     if (agentThought.usage) {
       usage.push(agentThought.usage);
     }
 
-    if (agentThought.__type === "answer") {
-      await persistEntity([
-        { role: "assistant" as const, message: agentThought.answer },
+    if (agentThought.__type === "text") {
+      await persist([
+        { role: "assistant" as const, message: agentThought.text },
       ]);
 
-      context.push(`<answer>\n${agentThought.answer}\n</answer>`);
+      context.push({
+        role: "assistant",
+        content: agentThought.text,
+        name: "assistant",
+      });
 
       // Wait for the next message or exit signal
       await condition(() => pending.length > 0 || userRequestedExit);
     }
 
-    if (agentThought.__type === "action") {
-      context.push(`<thought>\n${agentThought.thought}\n</thought>`);
-
-      context.push(
-        `<action><reason>\n${agentThought.action.reason}\n</reason><name>${agentThought.action.name}</name><input>${JSON.stringify(agentThought.action.input)}</input></action>`
+    if (agentThought.__type === "tool") {
+      const actions: Promise<ToolMessage>[] = agentThought.tool.map(
+        async (tool) => {
+          const agentAction = await action(tool.name, tool.input);
+          return {
+            content: [
+              {
+                type: "tool",
+              },
+            ],
+          } satisfies ToolMessage;
+        },
       );
 
-      const agentAction = await actionEntity(
-        agentThought.action.name,
-        agentThought.action.input
-      );
+      const actionResults = await Promise.all(actions);
 
-      const agentObservation = await observationEntity(context, agentAction);
+      const agentObservation = await observation(actionResults);
 
       if (agentObservation.usage) {
         usage.push(agentObservation.usage);
       }
 
       context.push(
-        `<observation>\n${agentObservation.observations}\n</observation>`
+        `<observation>\n${agentObservation.observations}\n</observation>`,
       );
 
-      if (workflowInfo().continueAsNewSuggested) {
-        const compactContext = await compactEntity(context);
+      // Check if we need to compact the context due to length
+      const results = await tokens(context);
+
+      if (
+        workflowInfo().continueAsNewSuggested ||
+        results.current > results.limit
+      ) {
+        const compactContext = await compact(context);
         if (compactContext.usage) {
           usage.push(compactContext.usage);
         }
