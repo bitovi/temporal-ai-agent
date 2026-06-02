@@ -8,26 +8,23 @@ import {
   workflowInfo,
 } from "@temporalio/workflow";
 import type * as activities from "./activities";
-import {
-  AIMessage,
-  MessageFieldWithRole,
-  ToolMessage,
-  UsageMetadata,
-} from "@langchain/core/messages";
+import { UsageMetadata } from "@langchain/core/messages";
+import { WorkflowMessage } from "../types";
 
-const { completion, action, observation, compact, persist, tokens } =
-  proxyActivities<typeof activities>({
-    startToCloseTimeout: "10 minute",
-    retry: {
-      backoffCoefficient: 1,
-      initialInterval: "3 seconds",
-      maximumAttempts: 5,
-    },
-  });
+const { completion, action, compact, persist, tokens } = proxyActivities<
+  typeof activities
+>({
+  startToCloseTimeout: "10 minute",
+  retry: {
+    backoffCoefficient: 1,
+    initialInterval: "3 seconds",
+    maximumAttempts: 5,
+  },
+});
 
 export type AgentEntityWorkflowInput = {
   continueAsNew?: {
-    context: MessageFieldWithRole[];
+    context: WorkflowMessage[];
     usage: UsageMetadata[];
     pending: AgentEntityWorkflowMessagePayload[];
   };
@@ -50,7 +47,7 @@ export const agentEntityWorkflowExitSignal = defineSignal(
 export async function agentEntityWorkflow(
   input: AgentEntityWorkflowInput,
 ): Promise<{ usage: UsageMetadata }> {
-  const context: MessageFieldWithRole[] = input.continueAsNew
+  const context: WorkflowMessage[] = input.continueAsNew
     ? input.continueAsNew.context
     : [];
   const usage: UsageMetadata[] = input.continueAsNew
@@ -62,6 +59,8 @@ export async function agentEntityWorkflow(
     : [];
 
   let userRequestedExit = false;
+
+  let tools: WorkflowMessage[] = [];
 
   setHandler(
     agentEntityWorkflowMessageSignal,
@@ -107,27 +106,29 @@ export async function agentEntityWorkflow(
 
       const message = pending.shift()!;
       context.push({
-        role: "human",
-        content: message.message,
+        role: "user",
+        message: message.message,
         name: message.name,
+        date: message.date,
       });
     }
 
-    const agentThought = await completion(context);
+    const agentThought = await completion(context, tools);
 
     if (agentThought.usage) {
       usage.push(agentThought.usage);
     }
 
     if (agentThought.__type === "text") {
+      tools = [];
+
       await persist([
         { role: "assistant" as const, message: agentThought.text },
       ]);
 
       context.push({
         role: "assistant",
-        content: agentThought.text,
-        name: "assistant",
+        message: agentThought.text,
       });
 
       // Wait for the next message or exit signal
@@ -135,30 +136,38 @@ export async function agentEntityWorkflow(
     }
 
     if (agentThought.__type === "tool") {
-      const actions: Promise<ToolMessage>[] = agentThought.tool.map(
-        async (tool) => {
-          const agentAction = await action(tool.name, tool.input);
-          return {
-            content: [
-              {
-                type: "tool",
-              },
-            ],
-          } satisfies ToolMessage;
-        },
-      );
+      const actions: Promise<{
+        name: string;
+        input: any;
+        id: string;
+        output: string;
+      }>[] = agentThought.tool.map(async (tool) => {
+        const agentAction = await action(tool.name, tool.input);
+        return {
+          name: tool.name,
+          input: tool.input,
+          id: tool.id,
+          output: agentAction,
+        };
+      });
 
       const actionResults = await Promise.all(actions);
 
-      const agentObservation = await observation(actionResults);
+      actionResults.forEach((entry) => {
+        tools.push({
+          role: "tool_call",
+          id: entry.id,
+          input: entry.input,
+          name: entry.name,
+        });
 
-      if (agentObservation.usage) {
-        usage.push(agentObservation.usage);
-      }
-
-      context.push(
-        `<observation>\n${agentObservation.observations}\n</observation>`,
-      );
+        tools.push({
+          role: "tool_result",
+          id: entry.id,
+          name: entry.name,
+          output: entry.output,
+        });
+      });
 
       // Check if we need to compact the context due to length
       const results = await tokens(context);

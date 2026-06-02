@@ -7,8 +7,10 @@ export async function persist(messages: WorkflowMessage[]) {
   for (const msg of messages) {
     if (msg.role === "user") {
       console.log(`${msg.name} (${msg.date}): ${msg.message}`);
+    } else if (msg.role === "assistant") {
+      console.log(`Assistant: ${msg.message}`);
     } else {
-      console.log(`${msg.role}: ${msg.message}`);
+      console.log(`${msg.role}: ${JSON.stringify(msg)}`);
     }
   }
 }

@@ -1,16 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { Config } from "../../internals/config";
 import {
+  estimateTokenCount,
+  estimateWorkflowMessageTokenCount,
   getChatModel,
   truncateContextToTokenLimit,
 } from "../../internals/model";
+import { fetchStructuredTools } from "../../internals/tools";
 import {
-  fetchStructuredTools,
-  fetchStructuredToolsAsString,
-} from "../../internals/tools";
-import { UsageMetadata } from "@langchain/core/messages";
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+  UsageMetadata,
+} from "@langchain/core/messages";
 import { emitEvent } from "../../internals/event-client";
 import { PromptTemplate } from "@langchain/core/prompts";
+import { WorkflowMessage } from "../../types";
 
 export type CompletionResult =
   | {
@@ -28,18 +34,35 @@ export type CompletionResult =
       usage?: UsageMetadata;
     };
 
-export async function completion(context: string[]): Promise<CompletionResult> {
+export async function completion(
+  context: WorkflowMessage[],
+  results: WorkflowMessage[],
+): Promise<CompletionResult> {
   try {
-    const limitedContext = truncateContextToTokenLimit(
+    const limitedChatContext = truncateContextToTokenLimit(
       context,
       Config.MAX_CONTEXT_TOKENS,
     );
 
+    const limitedChatContextTokens =
+      estimateWorkflowMessageTokenCount(limitedChatContext);
+
+    const limitedToolContext = truncateContextToTokenLimit(
+      results,
+      Config.MAX_TOOL_TOKENS,
+    );
+
+    const limitedToolContextTokens =
+      estimateWorkflowMessageTokenCount(limitedToolContext);
+
+    await emitEvent({
+      type: "debug",
+      message: `Truncated chat context to ${limitedChatContextTokens}/${Config.MAX_CONTEXT_TOKENS} tokens and tool context to ${limitedToolContextTokens}/${Config.MAX_TOOL_TOKENS} tokens.`,
+    });
+
     const promptTemplate = thoughtPromptTemplate();
     const formattedPrompt = await promptTemplate.format({
       currentDate: new Date().toISOString().split("T")[0],
-      previousSteps: limitedContext.join("\n"),
-      availableActions: await fetchStructuredToolsAsString(),
     });
 
     const model = getChatModel("high");
@@ -48,7 +71,9 @@ export async function completion(context: string[]): Promise<CompletionResult> {
     const modelWithTools = model.bindTools ? model.bindTools(tools) : model;
 
     const response = await modelWithTools.invoke([
-      { role: "user", content: formattedPrompt },
+      new SystemMessage(formattedPrompt),
+      ...convertMessages(limitedChatContext),
+      ...convertMessages(limitedToolContext),
     ]);
 
     // Check if the response is a tool call
@@ -109,16 +134,43 @@ export async function completion(context: string[]): Promise<CompletionResult> {
 export function thoughtPromptTemplate() {
   const templateString = `You are a helpful and friendly chat assistant.
 The current date is {currentDate}.
-
-<previous-conversation-context>
-{previousSteps}
-</previous-conversation-context>
 `;
 
   const prompt = new PromptTemplate({
     template: templateString,
-    inputVariables: ["currentDate", "previousSteps"],
+    inputVariables: ["currentDate"],
   });
 
   return prompt;
+}
+
+function convertMessages(messages: WorkflowMessage[]) {
+  return messages.map((entry) => {
+    switch (entry.role) {
+      case "assistant":
+        return new AIMessage(entry.message);
+      case "user":
+        return new HumanMessage(entry.message);
+      case "tool_call":
+        return new AIMessage({
+          tool_calls: [
+            {
+              type: "tool_call",
+              args: entry.input,
+              name: entry.name,
+              id: entry.id,
+            },
+          ],
+        });
+      case "tool_result":
+        return new ToolMessage({
+          tool_call_id: entry.id,
+          content: entry.output,
+          name: entry.name,
+        });
+      default:
+        //@ts-expect-error
+        throw new Error(`Unrecognized role: ${entry.role}`);
+    }
+  });
 }

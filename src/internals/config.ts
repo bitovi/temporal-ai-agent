@@ -8,7 +8,7 @@ interface TemporalClientOptions {
   };
 }
 
-type ModelProvider = "openai";
+type ModelProvider = "openai" | "anthropic";
 
 export class Config {
   static get MODEL_PROVIDER(): ModelProvider {
@@ -33,7 +33,7 @@ export class Config {
    */
   static get OPENAI_HIGH_MODEL(): string {
     if (!process.env.OPENAI_HIGH_MODEL) {
-      return "gpt-5.1";
+      return "gpt-5.4";
     }
 
     return process.env.OPENAI_HIGH_MODEL;
@@ -49,6 +49,32 @@ export class Config {
     }
 
     return process.env.OPENAI_LOW_MODEL;
+  }
+
+  static get ANTHROPIC_API_KEY(): string {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error(
+        "ANTHROPIC_API_KEY is not defined in environment variables",
+      );
+    }
+
+    return process.env.ANTHROPIC_API_KEY;
+  }
+
+  static get ANTHROPIC_HIGH_MODEL(): string {
+    if (!process.env.ANTHROPIC_HIGH_MODEL) {
+      return "claude-opus-4-8";
+    }
+
+    return process.env.ANTHROPIC_HIGH_MODEL;
+  }
+
+  static get ANTHROPIC_LOW_MODEL(): string {
+    if (!process.env.ANTHROPIC_LOW_MODEL) {
+      return "claude-haiku-4-5";
+    }
+
+    return process.env.ANTHROPIC_LOW_MODEL;
   }
 
   static get TEMPORAL_NAMESPACE(): string {

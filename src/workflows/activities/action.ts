@@ -1,6 +1,7 @@
 import { StructuredTool } from "@langchain/core/tools";
 import { fetchStructuredTools } from "../../internals/tools";
 import { emitEvent } from "../../internals/event-client";
+import { estimateTokenCount } from "../../internals/model";
 
 export async function action(
   toolName: string,
@@ -12,11 +13,13 @@ export async function action(
     try {
       const result = await tool.invoke(input);
 
-      console.log(`Invoked tool ${toolName}`);
+      const tokens = estimateTokenCount(result);
+
+      console.log(`Invoked tool ${toolName}, resulted in ${tokens} tokens.`);
 
       await emitEvent({
         type: "action",
-        message: `Invoked tool ${toolName} with input ${JSON.stringify(input)}`,
+        message: `Invoked tool ${toolName} with input ${JSON.stringify(input)}. Resulted in ${tokens} tokens.`,
       });
 
       return result as string;

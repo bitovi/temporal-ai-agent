@@ -6,13 +6,16 @@ import {
 import { Config } from "../../internals/config";
 import { emitEvent } from "../../internals/event-client";
 import { PromptTemplate } from "@langchain/core/prompts";
+import { WorkflowMessage } from "../../types";
 
 export type CompactionResult = {
-  context: string[];
+  context: WorkflowMessage[];
   usage?: UsageMetadata;
 };
 
-export async function compact(context: string[]): Promise<CompactionResult> {
+export async function compact(
+  context: WorkflowMessage[],
+): Promise<CompactionResult> {
   let content = "";
   try {
     const limitedContext = truncateContextToTokenLimit(
@@ -22,7 +25,10 @@ export async function compact(context: string[]): Promise<CompactionResult> {
 
     const compactTemplate = compactPromptTemplate();
     const formattedPrompt = await compactTemplate.format({
-      contextHistory: limitedContext.join("\n"),
+      contextHistory: limitedContext
+        .filter((msg) => msg.role === "assistant" || msg.role === "user")
+        .map((msg) => msg.message)
+        .join("\n"),
     });
 
     const model = getChatModel("low");
@@ -37,7 +43,7 @@ export async function compact(context: string[]): Promise<CompactionResult> {
 
     // Return the latest 3 context entries along with the new compacted context
     return {
-      context: [content, ...context.slice(-3)],
+      context: [{ role: "assistant", message: content }, ...context.slice(-3)],
       usage,
     };
   } catch (error) {

@@ -1,9 +1,15 @@
 import { Config } from "../../internals/config";
 import { estimateTokenCount } from "../../internals/model";
+import { WorkflowMessage } from "../../types";
 
 export async function tokens(
-  context: string[],
+  context: WorkflowMessage[],
 ): Promise<{ current: number; limit: number }> {
-  const count = estimateTokenCount(context.join("\n"));
+  const count = estimateTokenCount(
+    context
+      .filter((msg) => msg.role === "assistant" || msg.role === "user")
+      .map((msg) => msg.message)
+      .join("\n"),
+  );
   return { current: count, limit: Config.MAX_CONTEXT_TOKENS };
 }
