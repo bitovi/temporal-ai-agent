@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { Config } from "../../internals/config";
+import { Config } from "../../../config";
 import {
   estimateTokenCount,
   estimateWorkflowMessageTokenCount,
   getChatModel,
   truncateContextToTokenLimit,
-} from "../../internals/model";
-import { fetchStructuredTools } from "../../internals/tools";
+} from "../provider";
+import { fetchStructuredTools } from "../../../tools/index";
 import {
   AIMessage,
   HumanMessage,
@@ -14,9 +14,9 @@ import {
   ToolMessage,
   UsageMetadata,
 } from "@langchain/core/messages";
-import { emitEvent } from "../../internals/event-client";
+import { emitEvent } from "../../../emit";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { WorkflowMessage } from "../../types";
+import { WorkflowMessage } from "../types";
 
 export type CompletionResult =
   | {

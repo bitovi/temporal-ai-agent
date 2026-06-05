@@ -1,8 +1,8 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
 import { encoding_for_model } from "tiktoken";
-import { Config } from "./config";
-import { WorkflowMessage } from "../types";
+import { Config } from "../../config";
+import { WorkflowMessage } from "./types";
 import { ChatAnthropic } from "@langchain/anthropic";
 
 export function getChatModel(quality: "high" | "low"): BaseChatModel {

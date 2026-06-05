@@ -1,4 +1,4 @@
-import { WorkflowMessage } from "../../types";
+import { WorkflowMessage } from "../types";
 
 export async function persist(messages: WorkflowMessage[]) {
   // Implementation for persisting a message with a given role

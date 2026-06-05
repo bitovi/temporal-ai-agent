@@ -1,11 +1,11 @@
 import dotenv from "dotenv";
 import { NativeConnection, Worker } from "@temporalio/worker";
-import * as activities from "./workflows/activities";
-import { Config } from "./internals/config";
+import * as activities from "./temporal/agent/activities";
+import { Config } from "./config";
 
 dotenv.config();
 
-export async function createWorker() {
+export async function createAgentWorker() {
   const connection = await NativeConnection.connect(
     Config.TEMPORAL_CLIENT_OPTIONS,
   );
@@ -14,7 +14,7 @@ export async function createWorker() {
     connection,
     namespace: Config.TEMPORAL_NAMESPACE,
     taskQueue: Config.TEMPORAL_TASK_QUEUE,
-    workflowsPath: require.resolve("./workflows/workflow"),
+    workflowsPath: require.resolve("./temporal/agent/workflow"),
     activities,
   });
 
@@ -24,7 +24,7 @@ export async function createWorker() {
 export async function startWorker() {
   console.log("Initializing Temporal worker...");
 
-  const worker = await createWorker();
+  const worker = await createAgentWorker();
 
   console.log("Temporal worker started successfully");
   console.log(`Task queue: ${Config.TEMPORAL_TASK_QUEUE}`);

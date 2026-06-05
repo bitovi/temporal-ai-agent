@@ -9,7 +9,7 @@ import {
 } from "@temporalio/workflow";
 import type * as activities from "./activities";
 import { UsageMetadata } from "@langchain/core/messages";
-import { WorkflowMessage } from "../types";
+import { WorkflowMessage } from "./types";
 
 const { completion, action, compact, persist, tokens } = proxyActivities<
   typeof activities

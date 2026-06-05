@@ -1,12 +1,9 @@
 import { UsageMetadata } from "@langchain/core/messages";
-import {
-  getChatModel,
-  truncateContextToTokenLimit,
-} from "../../internals/model";
-import { Config } from "../../internals/config";
-import { emitEvent } from "../../internals/event-client";
+import { getChatModel, truncateContextToTokenLimit } from "../provider";
+import { Config } from "../../../config";
+import { emitEvent } from "../../../emit";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { WorkflowMessage } from "../../types";
+import { WorkflowMessage } from "../types";
 
 export type CompactionResult = {
   context: WorkflowMessage[];

@@ -1,6 +1,6 @@
-import { Config } from "../../internals/config";
-import { estimateTokenCount } from "../../internals/model";
-import { WorkflowMessage } from "../../types";
+import { Config } from "../../../config";
+import { estimateTokenCount } from "../provider";
+import { WorkflowMessage } from "../types";
 
 export async function tokens(
   context: WorkflowMessage[],
