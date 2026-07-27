@@ -34,11 +34,11 @@
         "zod": "^4.4.3"
     },
     "devDependencies": {
-        "@tsconfig/node24": "^24.0.4",
+        "@tsconfig/node26": "^26.0.0",
         "prettier": "^3.9.6",
         "ts-node": "^10.9.2"
     },
     "engines": {
-        "node": "24"
+        "node": ">=26"
     }
 }
