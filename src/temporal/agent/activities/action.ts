@@ -1,6 +1,5 @@
 import { StructuredTool } from "@langchain/core/tools";
 import { fetchStructuredTools } from "../../../tools/index";
-import { emitEvent } from "../../../emit";
 import { estimateTokenCount } from "../provider";
 
 export async function action(
@@ -17,21 +16,11 @@ export async function action(
 
       console.log(`Invoked tool ${toolName}, resulted in ${tokens} tokens.`);
 
-      await emitEvent({
-        type: "action",
-        message: `Invoked tool ${toolName} with input ${JSON.stringify(input)}. Resulted in ${tokens} tokens.`,
-      });
-
       return result as string;
     } catch (err: unknown) {
       console.error(`Error invoking tool ${toolName}:`, err);
 
       const error = err as Error;
-      await emitEvent({
-        type: "error",
-        message: `Error invoking tool ${toolName}: ${error.message}`,
-      });
-
       return JSON.stringify({
         name: toolName,
         input: input,
@@ -41,12 +30,6 @@ export async function action(
   }
 
   console.warn(`Tool with name ${toolName} not found.`);
-
-  await emitEvent({
-    type: "error",
-    message: `Tool with name ${toolName} not found.`,
-  });
-
   return JSON.stringify({
     name: toolName,
     input: input,

@@ -1,22 +1,31 @@
+import { WorkflowStreamClient } from "@temporalio/workflow-streams/client";
 import { randomUUID } from "node:crypto";
 import { Config } from "../../../config";
 import {
-  estimateTokenCount,
   estimateWorkflowMessageTokenCount,
-  getChatModel,
+  getStreamingChatModel,
   truncateContextToTokenLimit,
 } from "../provider";
 import { fetchStructuredTools } from "../../../tools/index";
 import {
   AIMessage,
+  ContentBlock,
   HumanMessage,
   SystemMessage,
   ToolMessage,
   UsageMetadata,
 } from "@langchain/core/messages";
-import { emitEvent } from "../../../emit";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { WorkflowMessage } from "../types";
+import { Context } from "@temporalio/activity";
+
+export interface TextDelta {
+  text: string;
+}
+
+export interface RetryEvent {
+  attempt: number;
+}
 
 export type CompletionResult =
   | {
@@ -39,50 +48,98 @@ export async function completion(
   results: WorkflowMessage[],
 ): Promise<CompletionResult> {
   try {
+    const attempt = Context.current().info.attempt;
+    await using streamClient = WorkflowStreamClient.fromWithinActivity({
+      batchInterval: "200 milliseconds",
+    });
+
     const limitedChatContext = truncateContextToTokenLimit(
       context,
       Config.MAX_CONTEXT_TOKENS,
     );
-
-    const limitedChatContextTokens =
-      estimateWorkflowMessageTokenCount(limitedChatContext);
 
     const limitedToolContext = truncateContextToTokenLimit(
       results,
       Config.MAX_TOOL_TOKENS,
     );
 
-    const limitedToolContextTokens =
-      estimateWorkflowMessageTokenCount(limitedToolContext);
-
-    await emitEvent({
-      type: "debug",
-      message: `Truncated chat context to ${limitedChatContextTokens}/${Config.MAX_CONTEXT_TOKENS} tokens and tool context to ${limitedToolContextTokens}/${Config.MAX_TOOL_TOKENS} tokens.`,
-    });
-
     const promptTemplate = thoughtPromptTemplate();
     const formattedPrompt = await promptTemplate.format({
       currentDate: new Date().toISOString().split("T")[0],
     });
 
-    const model = getChatModel("high");
+    const model = getStreamingChatModel("high");
     const tools = await fetchStructuredTools();
+
+    const deltas = streamClient.topic<TextDelta>("delta");
+    const retry = streamClient.topic<RetryEvent>("retry");
+    const close = streamClient.topic<Record<string, never>>("close");
+
+    // Tell consumers an earlier attempt's deltas are stale.
+    if (attempt > 1) {
+      retry.publish({ attempt }, { forceFlush: true });
+    }
 
     const modelWithTools = model.bindTools ? model.bindTools(tools) : model;
 
-    const response = await modelWithTools.invoke([
+    const stream = await modelWithTools.stream([
       new SystemMessage(formattedPrompt),
       ...convertMessages(limitedChatContext),
       ...convertMessages(limitedToolContext),
     ]);
 
+    const toolBlocks: any[] = [];
+    const textBlocks: (string | ContentBlock)[] = [];
+
+    let firstBlock = true;
+    for await (const chunk of stream) {
+      // Check if a tool call is being made
+
+      if (chunk.tool_calls && chunk.tool_calls.length > 0) {
+        console.log("Tool call detected:", chunk.tool_calls);
+        toolBlocks.push(...chunk.tool_calls);
+      }
+
+      if (chunk.content) {
+        console.log("Content chunk received:", chunk.content);
+        if (typeof chunk.content == "string") {
+          deltas.publish(
+            { text: chunk.content },
+            firstBlock ? { forceFlush: true } : undefined,
+          );
+          firstBlock = false;
+          textBlocks.push(...chunk.content);
+        } else {
+          if (chunk.content.length == 0) {
+            console.warn("Received empty content chunk:", chunk.content);
+            continue;
+          }
+
+          const textContent: string = chunk.content
+            .filter((block) => block.type == "text")
+            .map((block) => block.text)
+            .join("");
+
+          deltas.publish(
+            { text: textContent },
+            firstBlock ? { forceFlush: true } : undefined,
+          );
+          firstBlock = false;
+          textBlocks.push(...chunk.content);
+        }
+      }
+    }
+
+    // After the stream is complete, signal to consumers that the stream is closed
+    close.publish({});
+
     // Check if the response is a tool call
-    if (response.tool_calls && response.tool_calls.length > 0) {
+    if (toolBlocks && toolBlocks.length > 0) {
       // Format into the response and return
       return {
         __type: "tool",
-        usage: response.usage_metadata,
-        tool: response.tool_calls.map((call) => ({
+        usage: undefined,
+        tool: toolBlocks.map((call) => ({
           name: call.name,
           input: call.args,
           id: call.id || randomUUID(),
@@ -90,32 +147,24 @@ export async function completion(
       };
     }
 
-    if (response.content) {
-      if (!Array.isArray(response.content)) {
-        await emitEvent({ type: "answer", message: response.content });
-        return {
-          __type: "text",
-          usage: response.usage_metadata,
-          text: response.content,
-        };
-      }
-
+    if (textBlocks && textBlocks.length > 0) {
       const text: string[] = [];
 
-      response.content.forEach((block) => {
-        if (block.type == "text") {
+      textBlocks.forEach((block) => {
+        if (typeof block === "string") {
+          text.push(block);
+        } else if (block.type == "text") {
           text.push(block.text as string);
+        } else {
+          console.warn("Unrecognized block type:", block.type);
         }
-
-        console.warn("Unrecognized block type:", block.type);
       });
 
       if (text.length > 0) {
-        await emitEvent({ type: "answer", message: text.join("\n") });
         return {
           __type: "text",
-          usage: response.usage_metadata,
-          text: text.join("\n"),
+          usage: undefined,
+          text: text.join(""),
         };
       }
     }
@@ -123,10 +172,7 @@ export async function completion(
     throw new Error("Unrecognized response format");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    await emitEvent({
-      type: "error",
-      message: `Completion error: ${errorMessage}`,
-    });
+    console.error("Completion error:", errorMessage);
     throw error;
   }
 }

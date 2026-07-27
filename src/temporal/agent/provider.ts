@@ -35,6 +35,38 @@ export function getChatModel(quality: "high" | "low"): BaseChatModel {
   }
 }
 
+export function getStreamingChatModel(quality: "high" | "low"): BaseChatModel {
+  switch (Config.MODEL_PROVIDER) {
+    case "openai": {
+      return new ChatOpenAI({
+        maxRetries: 0, // We want retries to only happen from Temporal, not from the provider
+        model:
+          quality === "high"
+            ? Config.OPENAI_HIGH_MODEL
+            : Config.OPENAI_LOW_MODEL,
+        apiKey: Config.OPENAI_API_KEY,
+        streaming: true, // Handle streaming using Temporal Workflow Streams
+      });
+    }
+
+    case "anthropic": {
+      return new ChatAnthropic({
+        maxRetries: 0, // We want retries to only happen from Temporal, not from the provider
+        model:
+          quality === "high"
+            ? Config.ANTHROPIC_HIGH_MODEL
+            : Config.ANTHROPIC_LOW_MODEL,
+        apiKey: Config.ANTHROPIC_API_KEY,
+        streaming: true, // Handle streaming using Temporal Workflow Streams
+      });
+    }
+
+    default: {
+      throw new Error(`Unsupported model provider: ${Config.MODEL_PROVIDER}`);
+    }
+  }
+}
+
 export function estimateTokenCount(text: string): number {
   try {
     const encoding = encoding_for_model(Config.OPENAI_HIGH_MODEL as any);

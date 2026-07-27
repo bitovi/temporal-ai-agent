@@ -1,7 +1,6 @@
 import { UsageMetadata } from "@langchain/core/messages";
 import { getChatModel, truncateContextToTokenLimit } from "../provider";
 import { Config } from "../../../config";
-import { emitEvent } from "../../../emit";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { WorkflowMessage } from "../types";
 
@@ -36,7 +35,6 @@ export async function compact(
     content = response.content as string;
     const usage =
       (response as any).usage_metadata || (response as any).metadata?.usage;
-    await emitEvent({ type: "compact", message: "Context compacted" });
 
     // Return the latest 3 context entries along with the new compacted context
     return {
@@ -44,10 +42,12 @@ export async function compact(
       usage,
     };
   } catch (error) {
-    await emitEvent({
-      type: "error",
-      message: `Compact error: ${(error as Error).message}. Full response: ${content}`,
-    });
+    console.error(
+      "Compact error:",
+      (error as Error).message,
+      "Full response:",
+      content,
+    );
     throw error;
   }
 }

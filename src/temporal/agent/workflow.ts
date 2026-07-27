@@ -7,6 +7,8 @@ import {
   setHandler,
   workflowInfo,
 } from "@temporalio/workflow";
+import { WorkflowStream } from "@temporalio/workflow-streams/workflow";
+
 import type * as activities from "./activities";
 import { UsageMetadata } from "@langchain/core/messages";
 import { WorkflowMessage } from "./types";
@@ -47,6 +49,8 @@ export const agentEntityWorkflowExitSignal = defineSignal(
 export async function agentEntityWorkflow(
   input: AgentEntityWorkflowInput,
 ): Promise<{ usage: UsageMetadata }> {
+  const stream = new WorkflowStream();
+
   const context: WorkflowMessage[] = input.continueAsNew
     ? input.continueAsNew.context
     : [];
