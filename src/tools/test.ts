@@ -5,6 +5,7 @@ export function testTool(): StructuredTool {
   return tool(
     async (input: Record<string, string>) => {
       console.log(`Test Tool Executed with input:`, input);
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // Simulate some processing delay
       return JSON.stringify({ test: "passed", original_input: input });
     },
     {

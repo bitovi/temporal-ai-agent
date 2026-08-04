@@ -1,22 +1,25 @@
 import {
-  allHandlersFinished,
   condition,
-  continueAsNew,
   defineSignal,
   proxyActivities,
   setHandler,
   workflowInfo,
 } from "@temporalio/workflow";
-import { WorkflowStream } from "@temporalio/workflow-streams/workflow";
+import {
+  WorkflowStream,
+  type WorkflowStreamState,
+} from "@temporalio/workflow-streams/workflow";
 
 import type * as activities from "./activities";
 import { UsageMetadata } from "@langchain/core/messages";
 import { WorkflowMessage } from "./types";
+import { STREAM_TOPIC, type StatusEvent } from "./stream-topics";
 
 const { completion, action, compact, persist, tokens } = proxyActivities<
   typeof activities
 >({
   startToCloseTimeout: "10 minute",
+  heartbeatTimeout: "30 seconds",
   retry: {
     backoffCoefficient: 1,
     initialInterval: "3 seconds",
@@ -25,6 +28,7 @@ const { completion, action, compact, persist, tokens } = proxyActivities<
 });
 
 export type AgentEntityWorkflowInput = {
+  streamState?: WorkflowStreamState;
   continueAsNew?: {
     context: WorkflowMessage[];
     usage: UsageMetadata[];
@@ -46,10 +50,16 @@ export const agentEntityWorkflowExitSignal = defineSignal(
   "agentEntityWorkflowExit",
 );
 
+// Sent by an SSE subscriber once it has received a response's `close` terminator.
+export const subscriberAcknowledgedTerminator = defineSignal(
+  "subscriberAcknowledgedTerminator",
+);
+
 export async function agentEntityWorkflow(
   input: AgentEntityWorkflowInput,
 ): Promise<{ usage: UsageMetadata }> {
-  const stream = new WorkflowStream();
+  const stream = new WorkflowStream(input.streamState);
+  const status = stream.topic<StatusEvent>(STREAM_TOPIC.status);
 
   const context: WorkflowMessage[] = input.continueAsNew
     ? input.continueAsNew.context
@@ -64,6 +74,9 @@ export async function agentEntityWorkflow(
 
   let userRequestedExit = false;
 
+  // Starts true so an immediate exit with no prior response returns without waiting.
+  let subscriberDone = true;
+
   let tools: WorkflowMessage[] = [];
 
   setHandler(
@@ -77,11 +90,19 @@ export async function agentEntityWorkflow(
     userRequestedExit = true;
   });
 
+  setHandler(subscriberAcknowledgedTerminator, () => {
+    subscriberDone = true;
+  });
+
   // Wait for the first message to arrive
   await condition(() => pending.length > 0 || userRequestedExit);
 
   while (true) {
     if (userRequestedExit) {
+      // Give an in-flight subscriber poll a chance to fetch the final `close`
+      // terminator before the Workflow returns. Falls through on timeout.
+      await condition(() => subscriberDone, "10 seconds");
+
       const finalUsage: UsageMetadata = usage.reduce(
         (acc, curr) => {
           acc.input_tokens += curr.input_tokens;
@@ -117,6 +138,9 @@ export async function agentEntityWorkflow(
       });
     }
 
+    // A new response is about to stream; require a fresh subscriber ack.
+    subscriberDone = false;
+    status.publish({ label: "Thinking\u2026" });
     const agentThought = await completion(context, tools);
 
     if (agentThought.usage) {
@@ -140,6 +164,9 @@ export async function agentEntityWorkflow(
     }
 
     if (agentThought.__type === "tool") {
+      const toolNames = agentThought.tool.map((t) => t.name).join(", ");
+      status.publish({ label: `Running ${toolNames}\u2026` });
+
       const actions: Promise<{
         name: string;
         input: any;
@@ -156,6 +183,7 @@ export async function agentEntityWorkflow(
       });
 
       const actionResults = await Promise.all(actions);
+      status.publish({ label: "Thinking\u2026" });
 
       actionResults.forEach((entry) => {
         tools.push({
@@ -185,15 +213,18 @@ export async function agentEntityWorkflow(
           usage.push(compactContext.usage);
         }
 
-        await condition(() => allHandlersFinished());
-
-        return continueAsNew<typeof agentEntityWorkflow>({
-          continueAsNew: {
-            context: compactContext.context,
-            usage,
-            pending,
+        // Drains subscribers/pollers and carries the stream log to the next run
+        // so subscribers don't see a gap across the rollover.
+        await stream.continueAsNew<typeof agentEntityWorkflow>((state) => [
+          {
+            streamState: state,
+            continueAsNew: {
+              context: compactContext.context,
+              usage,
+              pending,
+            },
           },
-        });
+        ]);
       }
     }
   }

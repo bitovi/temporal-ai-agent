@@ -77,6 +77,12 @@
 
     .event.answer {
       background: #e6f3ff;
+      white-space: pre-wrap;
+    }
+
+    .event.user {
+      background: #eef2ff;
+      text-align: right;
     }
 
     .status {
@@ -84,6 +90,13 @@
       margin: 10px 0;
       border-radius: 4px;
       background: #e8f5e9;
+    }
+
+    #agentStatus {
+      font-size: 12px;
+      color: #555;
+      font-style: italic;
+      min-height: 18px;
     }
   </style>
 </head>
@@ -117,6 +130,7 @@
         <button onclick="sendMessage()" style="width: 48%; margin-right: 2%;">Send Message</button>
         <button onclick="exitConversation()" class="danger" style="width: 48%;">Exit</button>
       </div>
+      <div id="agentStatus"></div>
     </div>
 
     <div id="events"></div>
@@ -124,34 +138,81 @@
 
   <script>
     let currentConversationId = null;
-    const eventSource = new EventSource('/events');
+    let eventSource = null;
+    let currentAssistantEl = null;
 
-    eventSource.onopen = function () {
-      document.getElementById('status').textContent = '✓ Connected to event stream';
-    };
+    function setStatus(text) {
+      document.getElementById('status').textContent = text;
+    }
 
-    eventSource.onerror = function (e) {
-      document.getElementById('status').textContent = '✗ Error connecting to event stream';
-    };
+    function scrollEvents() {
+      const events = document.getElementById('events');
+      events.scrollTop = events.scrollHeight;
+    }
 
-    eventSource.onmessage = function (event) {
-      const data = JSON.parse(event.data);
+    function addBubble(role, text) {
       const div = document.createElement('div');
-      div.className = 'event';
-      if (data.type === 'error') div.className += ' error';
-      if (data.type === 'answer') div.className += ' answer';
-      div.textContent = `[${data.type.toUpperCase()}] ${data.message}`;
+      div.className = 'event ' + (role === 'user' ? 'user' : 'answer');
+      div.textContent = text;
       document.getElementById('events').appendChild(div);
-      document.getElementById('events').scrollTop = document.getElementById('events').scrollHeight;
-    };
+      scrollEvents();
+      return div;
+    }
+
+    function appendDelta(text) {
+      if (!currentAssistantEl) {
+        currentAssistantEl = addBubble('assistant', '');
+      }
+      currentAssistantEl.textContent += text;
+      scrollEvents();
+    }
+
+    function closeStream() {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      currentAssistantEl = null;
+    }
+
+    function openStream(id) {
+      closeStream();
+      eventSource = new EventSource(`/api/conversations/${id}/stream`);
+
+      eventSource.addEventListener('connected', () => setStatus('✓ Streaming connected'));
+
+      eventSource.addEventListener('status', (e) => {
+        const { label } = JSON.parse(e.data);
+        document.getElementById('agentStatus').textContent = label;
+      });
+
+      eventSource.addEventListener('delta', (e) => {
+        const { text } = JSON.parse(e.data);
+        appendDelta(text);
+      });
+
+      eventSource.addEventListener('retry', () => {
+        // Earlier attempt's tokens are stale; drop what we've shown.
+        if (currentAssistantEl) currentAssistantEl.textContent = '';
+      });
+
+      eventSource.addEventListener('close', () => {
+        // Finalize the current response; the next delta starts a new bubble.
+        currentAssistantEl = null;
+        document.getElementById('agentStatus').textContent = '';
+      });
+
+      eventSource.onerror = () => setStatus('✗ Stream disconnected, retrying...');
+    }
 
     async function createConversation() {
       const res = await fetch('/api/conversations', { method: 'POST' });
       const data = await res.json();
       currentConversationId = data.conversationId;
-      updateConversationSelect();
+      await updateConversationSelect();
       document.getElementById('messagePanel').style.display = 'block';
       document.getElementById('events').innerHTML = '';
+      openStream(currentConversationId);
     }
 
     async function updateConversationSelect() {
@@ -173,11 +234,13 @@
     function switchConversation() {
       const select = document.getElementById('conversationSelect');
       currentConversationId = select.value;
+      document.getElementById('events').innerHTML = '';
       if (currentConversationId) {
         document.getElementById('messagePanel').style.display = 'block';
-        document.getElementById('events').innerHTML = '';
+        openStream(currentConversationId);
       } else {
         document.getElementById('messagePanel').style.display = 'none';
+        closeStream();
       }
     }
 
@@ -195,6 +258,10 @@
         return;
       }
 
+      addBubble('user', message);
+      // Next streamed tokens belong to a fresh assistant response.
+      currentAssistantEl = null;
+
       await fetch(`/api/conversations/${currentConversationId}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -207,16 +274,19 @@
     async function exitConversation() {
       if (!currentConversationId) return;
 
-      const res = await fetch(`/api/conversations/${currentConversationId}/exit`, { method: 'POST' });
+      const id = currentConversationId;
+      closeStream();
+      const res = await fetch(`/api/conversations/${id}/exit`, { method: 'POST' });
       const data = await res.json();
 
       currentConversationId = null;
       document.getElementById('messagePanel').style.display = 'none';
-      updateConversationSelect();
+      await updateConversationSelect();
       document.getElementById('events').innerHTML += '<div class="event" style="background: #fff3cd;">Conversation ended. Usage: ' + JSON.stringify(data.usage) + '</div>';
     }
 
     // Load conversations on startup
+    setStatus('Select or create a conversation to begin');
     updateConversationSelect();
   </script>
 </body>

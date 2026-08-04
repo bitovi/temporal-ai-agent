@@ -2,13 +2,13 @@ import { WorkflowStreamClient } from "@temporalio/workflow-streams/client";
 import { randomUUID } from "node:crypto";
 import { Config } from "../../../config";
 import {
-  estimateWorkflowMessageTokenCount,
   getStreamingChatModel,
   truncateContextToTokenLimit,
 } from "../provider";
 import { fetchStructuredTools } from "../../../tools/index";
 import {
   AIMessage,
+  AIMessageChunk,
   ContentBlock,
   HumanMessage,
   SystemMessage,
@@ -18,14 +18,12 @@ import {
 import { PromptTemplate } from "@langchain/core/prompts";
 import { WorkflowMessage } from "../types";
 import { Context } from "@temporalio/activity";
-
-export interface TextDelta {
-  text: string;
-}
-
-export interface RetryEvent {
-  attempt: number;
-}
+import {
+  STREAM_TOPIC,
+  type CloseEvent,
+  type RetryEvent,
+  type TextDelta,
+} from "../stream-topics";
 
 export type CompletionResult =
   | {
@@ -71,9 +69,9 @@ export async function completion(
     const model = getStreamingChatModel("high");
     const tools = await fetchStructuredTools();
 
-    const deltas = streamClient.topic<TextDelta>("delta");
-    const retry = streamClient.topic<RetryEvent>("retry");
-    const close = streamClient.topic<Record<string, never>>("close");
+    const deltas = streamClient.topic<TextDelta>(STREAM_TOPIC.delta);
+    const retry = streamClient.topic<RetryEvent>(STREAM_TOPIC.retry);
+    const close = streamClient.topic<CloseEvent>(STREAM_TOPIC.close);
 
     // Tell consumers an earlier attempt's deltas are stale.
     if (attempt > 1) {
@@ -88,20 +86,36 @@ export async function completion(
       ...convertMessages(limitedToolContext),
     ]);
 
-    const toolBlocks: any[] = [];
     const textBlocks: (string | ContentBlock)[] = [];
+    let usage: UsageMetadata | undefined;
+    // Accumulate all chunks so tool_call args are fully assembled before we inspect them.
+    let gathered: AIMessageChunk | undefined;
 
     let firstBlock = true;
     for await (const chunk of stream) {
-      // Check if a tool call is being made
+      // Keep the Activity alive during long model streams and enable retries.
+      Context.current().heartbeat();
 
-      if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-        console.log("Tool call detected:", chunk.tool_calls);
-        toolBlocks.push(...chunk.tool_calls);
+      gathered = gathered
+        ? (gathered.concat(chunk) as AIMessageChunk)
+        : (chunk as AIMessageChunk);
+
+      if (chunk.usage_metadata) {
+        usage = usage
+          ? {
+              input_tokens:
+                usage.input_tokens + chunk.usage_metadata.input_tokens,
+              output_tokens:
+                usage.output_tokens + chunk.usage_metadata.output_tokens,
+              total_tokens:
+                usage.total_tokens + chunk.usage_metadata.total_tokens,
+            }
+          : chunk.usage_metadata;
       }
 
+      // Publish text deltas as they arrive; skip chunks that only carry tool call fragments.
       if (chunk.content) {
-        console.log("Content chunk received:", chunk.content);
+        // console.log("Content chunk received:", chunk.content);
         if (typeof chunk.content == "string") {
           deltas.publish(
             { text: chunk.content },
@@ -131,15 +145,16 @@ export async function completion(
     }
 
     // After the stream is complete, signal to consumers that the stream is closed
-    close.publish({});
+    close.publish({}, { forceFlush: true });
 
-    // Check if the response is a tool call
-    if (toolBlocks && toolBlocks.length > 0) {
-      // Format into the response and return
+    // Read tool calls from the fully assembled message so args are complete.
+    const completedToolCalls = gathered?.tool_calls ?? [];
+    if (completedToolCalls.length > 0) {
+      console.log("Tool calls assembled:", completedToolCalls);
       return {
         __type: "tool",
-        usage: undefined,
-        tool: toolBlocks.map((call) => ({
+        usage,
+        tool: completedToolCalls.map((call) => ({
           name: call.name,
           input: call.args,
           id: call.id || randomUUID(),
@@ -163,7 +178,7 @@ export async function completion(
       if (text.length > 0) {
         return {
           __type: "text",
-          usage: undefined,
+          usage,
           text: text.join(""),
         };
       }
