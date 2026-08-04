@@ -1,11 +1,23 @@
 import dotenv from "dotenv";
 import { NativeConnection, Worker } from "@temporalio/worker";
+import {
+  makeWorkflowExporter,
+  OpenTelemetryActivityInboundInterceptor,
+} from "@temporalio/interceptors-opentelemetry";
 import * as activities from "./temporal/agent/activities";
 import { Config } from "./config";
+import {
+  initTelemetry,
+  getExporter,
+  getResource,
+  shutdownTelemetry,
+} from "./telemetry";
 
 dotenv.config();
 
 export async function createAgentWorker() {
+  initTelemetry();
+
   const connection = await NativeConnection.connect(
     Config.TEMPORAL_CLIENT_OPTIONS,
   );
@@ -16,6 +28,17 @@ export async function createAgentWorker() {
     taskQueue: Config.TEMPORAL_TASK_QUEUE,
     workflowsPath: require.resolve("./temporal/agent/workflow"),
     activities,
+    sinks: {
+      exporter: makeWorkflowExporter(getExporter(), getResource()),
+    },
+    interceptors: {
+      workflowModules: [require.resolve("./temporal/agent/otel-interceptor")],
+      activity: [
+        (ctx) => ({
+          inbound: new OpenTelemetryActivityInboundInterceptor(ctx),
+        }),
+      ],
+    },
   });
 
   return worker;
@@ -49,12 +72,12 @@ if (require.main === module) {
   // Handle graceful shutdown
   process.on("SIGINT", () => {
     console.log("\nReceived SIGINT, shutting down worker gracefully...");
-    process.exit(0);
+    shutdownTelemetry().finally(() => process.exit(0));
   });
 
   process.on("SIGTERM", () => {
     console.log("\nReceived SIGTERM, shutting down worker gracefully...");
-    process.exit(0);
+    shutdownTelemetry().finally(() => process.exit(0));
   });
 
   // Start the worker

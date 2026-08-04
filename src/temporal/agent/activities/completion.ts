@@ -1,6 +1,9 @@
 import { WorkflowStreamClient } from "@temporalio/workflow-streams/client";
 import { randomUUID } from "node:crypto";
+import { trace, SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { Config } from "../../../config";
+
+const tracer = trace.getTracer("temporal-ai-agent");
 import {
   getStreamingChatModel,
   truncateContextToTokenLimit,
@@ -45,6 +48,15 @@ export async function completion(
   context: WorkflowMessage[],
   results: WorkflowMessage[],
 ): Promise<CompletionResult> {
+  const span = tracer.startSpan("gen_ai.completion", {
+    kind: SpanKind.CLIENT,
+    attributes: {
+      "gen_ai.system": Config.MODEL_PROVIDER,
+      "gen_ai.operation.name": "chat",
+      "gen_ai.request.message_count": context.length + results.length,
+    },
+  });
+
   try {
     const attempt = Context.current().info.attempt;
     await using streamClient = WorkflowStreamClient.fromWithinActivity({
@@ -147,10 +159,25 @@ export async function completion(
     // After the stream is complete, signal to consumers that the stream is closed
     close.publish({}, { forceFlush: true });
 
+    // Attach token usage to the span once the stream is fully consumed.
+    if (usage) {
+      span.setAttributes({
+        "gen_ai.usage.input_tokens": usage.input_tokens ?? 0,
+        "gen_ai.usage.output_tokens": usage.output_tokens ?? 0,
+        "gen_ai.usage.total_tokens": usage.total_tokens ?? 0,
+      });
+    }
+
     // Read tool calls from the fully assembled message so args are complete.
     const completedToolCalls = gathered?.tool_calls ?? [];
     if (completedToolCalls.length > 0) {
       console.log("Tool calls assembled:", completedToolCalls);
+      span.setAttribute("gen_ai.response.type", "tool_calls");
+      span.setAttribute(
+        "gen_ai.response.tool_count",
+        completedToolCalls.length,
+      );
+      span.setStatus({ code: SpanStatusCode.OK });
       return {
         __type: "tool",
         usage,
@@ -176,6 +203,8 @@ export async function completion(
       });
 
       if (text.length > 0) {
+        span.setAttribute("gen_ai.response.type", "text");
+        span.setStatus({ code: SpanStatusCode.OK });
         return {
           __type: "text",
           usage,
@@ -188,7 +217,11 @@ export async function completion(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Completion error:", errorMessage);
+    span.recordException(error as Error);
+    span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
     throw error;
+  } finally {
+    span.end();
   }
 }
 
