@@ -1,152 +1,294 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<title>Agent Entity Workflow</title>
-<style>
-  body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-  .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-  input, select, button { padding: 8px 12px; margin: 5px 0; font-size: 14px; }
-  select, input[type="text"] { width: 100%; box-sizing: border-box; }
-  button { background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-  button:hover { background: #0056b3; }
-  button.danger { background: #dc3545; }
-  button.danger:hover { background: #c82333; }
-  #events { margin-top: 20px; padding: 10px; background: #f9f9f9; border-left: 3px solid #007bff; max-height: 300px; overflow-y: auto; }
-  .event { padding: 8px; margin: 5px 0; background: white; border-radius: 3px; font-size: 13px; }
-  .event.error { background: #ffe6e6; color: #c00; }
-  .event.answer { background: #e6f3ff; }
-  .status { padding: 10px; margin: 10px 0; border-radius: 4px; background: #e8f5e9; }
-</style>
+  <title>Agent Entity Workflow</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    input,
+    select,
+    button {
+      padding: 8px 12px;
+      margin: 5px 0;
+      font-size: 14px;
+    }
+
+    select,
+    input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    button.danger {
+      background: #dc3545;
+    }
+
+    button.danger:hover {
+      background: #c82333;
+    }
+
+    #events {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f9f9f9;
+      border-left: 3px solid #007bff;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .event {
+      padding: 8px;
+      margin: 5px 0;
+      background: white;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+
+    .event.error {
+      background: #ffe6e6;
+      color: #c00;
+    }
+
+    .event.answer {
+      background: #e6f3ff;
+      white-space: pre-wrap;
+    }
+
+    .event.user {
+      background: #eef2ff;
+      text-align: right;
+    }
+
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      background: #e8f5e9;
+    }
+
+    #agentStatus {
+      font-size: 12px;
+      color: #555;
+      font-style: italic;
+      min-height: 18px;
+    }
+  </style>
 </head>
+
 <body>
-<div class="container">
-  <h1>Agent Entity Workflow</h1>
-  <div class="status" id="status">Connecting...</div>
-  
-  <div>
-    <label><strong>Conversation:</strong></label>
-    <select id="conversationSelect" onchange="switchConversation()">
-      <option value="">Select or create conversation</option>
-    </select>
-    <button onclick="createConversation()" style="width: 100%; margin-top: 8px;">New Conversation</button>
+  <div class="container">
+    <h1>Agent Entity Workflow</h1>
+    <div class="status" id="status">Connecting...</div>
+
+    <div>
+      <label><strong>Conversation:</strong></label>
+      <select id="conversationSelect" onchange="switchConversation()">
+        <option value="">Select or create conversation</option>
+      </select>
+      <button onclick="createConversation()" style="width: 100%; margin-top: 8px;">New Conversation</button>
+    </div>
+
+    <div id="messagePanel" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
+      <div>
+        <label><strong>Name:</strong></label>
+        <input type="text" id="nameInput" placeholder="Your name" value="user@example.com">
+      </div>
+
+      <div>
+        <label><strong>Message:</strong></label>
+        <input type="text" id="messageInput" placeholder="Type your message..."
+          onkeypress="if(event.key==='Enter') sendMessage()">
+      </div>
+
+      <div>
+        <button onclick="sendMessage()" style="width: 48%; margin-right: 2%;">Send Message</button>
+        <button onclick="exitConversation()" class="danger" style="width: 48%;">Exit</button>
+      </div>
+      <div id="agentStatus"></div>
+    </div>
+
+    <div id="events"></div>
   </div>
 
-  <div id="messagePanel" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
-    <div>
-      <label><strong>Name:</strong></label>
-      <input type="text" id="nameInput" placeholder="Your name" value="user@example.com">
-    </div>
-    
-    <div>
-      <label><strong>Message:</strong></label>
-      <input type="text" id="messageInput" placeholder="Type your message..." onkeypress="if(event.key==='Enter') sendMessage()">
-    </div>
-    
-    <div>
-      <button onclick="sendMessage()" style="width: 48%; margin-right: 2%;">Send Message</button>
-      <button onclick="exitConversation()" class="danger" style="width: 48%;">Exit</button>
-    </div>
-  </div>
+  <script>
+    let currentConversationId = null;
+    let eventSource = null;
+    let currentAssistantEl = null;
 
-  <div id="events"></div>
-</div>
+    function setStatus(text) {
+      document.getElementById('status').textContent = text;
+    }
 
-<script>
-let currentConversationId = null;
-const eventSource = new EventSource('/events');
+    function scrollEvents() {
+      const events = document.getElementById('events');
+      events.scrollTop = events.scrollHeight;
+    }
 
-eventSource.onopen = function() {
-  document.getElementById('status').textContent = '✓ Connected to event stream';
-};
+    function addBubble(role, text) {
+      const div = document.createElement('div');
+      div.className = 'event ' + (role === 'user' ? 'user' : 'answer');
+      div.textContent = text;
+      document.getElementById('events').appendChild(div);
+      scrollEvents();
+      return div;
+    }
 
-eventSource.onerror = function(e) {
-  document.getElementById('status').textContent = '✗ Error connecting to event stream';
-};
+    function appendDelta(text) {
+      if (!currentAssistantEl) {
+        currentAssistantEl = addBubble('assistant', '');
+      }
+      currentAssistantEl.textContent += text;
+      scrollEvents();
+    }
 
-eventSource.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  const div = document.createElement('div');
-  div.className = 'event';
-  if (data.type === 'error') div.className += ' error';
-  if (data.type === 'answer') div.className += ' answer';
-  div.textContent = `[${data.type.toUpperCase()}] ${data.message}`;
-  document.getElementById('events').appendChild(div);
-  document.getElementById('events').scrollTop = document.getElementById('events').scrollHeight;
-};
+    function closeStream() {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      currentAssistantEl = null;
+    }
 
-async function createConversation() {
-  const res = await fetch('/api/conversations', { method: 'POST' });
-  const data = await res.json();
-  currentConversationId = data.conversationId;
-  updateConversationSelect();
-  document.getElementById('messagePanel').style.display = 'block';
-  document.getElementById('events').innerHTML = '';
-}
+    function openStream(id) {
+      closeStream();
+      eventSource = new EventSource(`/api/conversations/${id}/stream`);
 
-async function updateConversationSelect() {
-  const res = await fetch('/api/conversations');
-  const data = await res.json();
-  const select = document.getElementById('conversationSelect');
-  select.innerHTML = '<option value="">Select conversation</option>';
-  data.conversations.forEach(id => {
-    const option = document.createElement('option');
-    option.value = id;
-    option.textContent = id.substring(0, 8) + '...';
-    select.appendChild(option);
-  });
-  if (currentConversationId) {
-    select.value = currentConversationId;
-  }
-}
+      eventSource.addEventListener('connected', () => setStatus('✓ Streaming connected'));
 
-function switchConversation() {
-  const select = document.getElementById('conversationSelect');
-  currentConversationId = select.value;
-  if (currentConversationId) {
-    document.getElementById('messagePanel').style.display = 'block';
-    document.getElementById('events').innerHTML = '';
-  } else {
-    document.getElementById('messagePanel').style.display = 'none';
-  }
-}
+      eventSource.addEventListener('status', (e) => {
+        const { label } = JSON.parse(e.data);
+        document.getElementById('agentStatus').textContent = label;
+      });
 
-async function sendMessage() {
-  if (!currentConversationId) {
-    alert('Please select or create a conversation');
-    return;
-  }
-  
-  const name = document.getElementById('nameInput').value.trim();
-  const message = document.getElementById('messageInput').value.trim();
-  
-  if (!name || !message) {
-    alert('Please fill in name and message');
-    return;
-  }
+      eventSource.addEventListener('delta', (e) => {
+        const { text } = JSON.parse(e.data);
+        appendDelta(text);
+      });
 
-  await fetch(`/api/conversations/${currentConversationId}/message`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, message })
-  });
+      eventSource.addEventListener('retry', () => {
+        // Earlier attempt's tokens are stale; drop what we've shown.
+        if (currentAssistantEl) currentAssistantEl.textContent = '';
+      });
 
-  document.getElementById('messageInput').value = '';
-}
+      eventSource.addEventListener('close', () => {
+        // Finalize the current response; the next delta starts a new bubble.
+        currentAssistantEl = null;
+        document.getElementById('agentStatus').textContent = '';
+      });
 
-async function exitConversation() {
-  if (!currentConversationId) return;
-  
-  const res = await fetch(`/api/conversations/${currentConversationId}/exit`, { method: 'POST' });
-  const data = await res.json();
-  
-  currentConversationId = null;
-  document.getElementById('messagePanel').style.display = 'none';
-  updateConversationSelect();
-  document.getElementById('events').innerHTML += '<div class="event" style="background: #fff3cd;">Conversation ended. Usage: ' + JSON.stringify(data.usage) + '</div>';
-}
+      eventSource.onerror = () => setStatus('✗ Stream disconnected, retrying...');
+    }
 
-// Load conversations on startup
-updateConversationSelect();
-</script>
+    async function createConversation() {
+      const res = await fetch('/api/conversations', { method: 'POST' });
+      const data = await res.json();
+      currentConversationId = data.conversationId;
+      await updateConversationSelect();
+      document.getElementById('messagePanel').style.display = 'block';
+      document.getElementById('events').innerHTML = '';
+      openStream(currentConversationId);
+    }
+
+    async function updateConversationSelect() {
+      const res = await fetch('/api/conversations');
+      const data = await res.json();
+      const select = document.getElementById('conversationSelect');
+      select.innerHTML = '<option value="">Select conversation</option>';
+      data.conversations.forEach(id => {
+        const option = document.createElement('option');
+        option.value = id;
+        option.textContent = id.substring(0, 8) + '...';
+        select.appendChild(option);
+      });
+      if (currentConversationId) {
+        select.value = currentConversationId;
+      }
+    }
+
+    function switchConversation() {
+      const select = document.getElementById('conversationSelect');
+      currentConversationId = select.value;
+      document.getElementById('events').innerHTML = '';
+      if (currentConversationId) {
+        document.getElementById('messagePanel').style.display = 'block';
+        openStream(currentConversationId);
+      } else {
+        document.getElementById('messagePanel').style.display = 'none';
+        closeStream();
+      }
+    }
+
+    async function sendMessage() {
+      if (!currentConversationId) {
+        alert('Please select or create a conversation');
+        return;
+      }
+
+      const name = document.getElementById('nameInput').value.trim();
+      const message = document.getElementById('messageInput').value.trim();
+
+      if (!name || !message) {
+        alert('Please fill in name and message');
+        return;
+      }
+
+      addBubble('user', message);
+      // Next streamed tokens belong to a fresh assistant response.
+      currentAssistantEl = null;
+
+      await fetch(`/api/conversations/${currentConversationId}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, message })
+      });
+
+      document.getElementById('messageInput').value = '';
+    }
+
+    async function exitConversation() {
+      if (!currentConversationId) return;
+
+      const id = currentConversationId;
+      closeStream();
+      const res = await fetch(`/api/conversations/${id}/exit`, { method: 'POST' });
+      const data = await res.json();
+
+      currentConversationId = null;
+      document.getElementById('messagePanel').style.display = 'none';
+      await updateConversationSelect();
+      document.getElementById('events').innerHTML += '<div class="event" style="background: #fff3cd;">Conversation ended. Usage: ' + JSON.stringify(data.usage) + '</div>';
+    }
+
+    // Load conversations on startup
+    setStatus('Select or create a conversation to begin');
+    updateConversationSelect();
+  </script>
 </body>
+
 </html>

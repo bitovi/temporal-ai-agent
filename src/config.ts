@@ -8,7 +8,7 @@ interface TemporalClientOptions {
   };
 }
 
-type ModelProvider = "openai";
+type ModelProvider = "openai" | "anthropic";
 
 export class Config {
   static get MODEL_PROVIDER(): ModelProvider {
@@ -33,7 +33,7 @@ export class Config {
    */
   static get OPENAI_HIGH_MODEL(): string {
     if (!process.env.OPENAI_HIGH_MODEL) {
-      return "gpt-5.1";
+      return "gpt-5.4";
     }
 
     return process.env.OPENAI_HIGH_MODEL;
@@ -49,6 +49,32 @@ export class Config {
     }
 
     return process.env.OPENAI_LOW_MODEL;
+  }
+
+  static get ANTHROPIC_API_KEY(): string {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error(
+        "ANTHROPIC_API_KEY is not defined in environment variables",
+      );
+    }
+
+    return process.env.ANTHROPIC_API_KEY;
+  }
+
+  static get ANTHROPIC_HIGH_MODEL(): string {
+    if (!process.env.ANTHROPIC_HIGH_MODEL) {
+      return "claude-opus-4-8";
+    }
+
+    return process.env.ANTHROPIC_HIGH_MODEL;
+  }
+
+  static get ANTHROPIC_LOW_MODEL(): string {
+    if (!process.env.ANTHROPIC_LOW_MODEL) {
+      return "claude-haiku-4-5";
+    }
+
+    return process.env.ANTHROPIC_LOW_MODEL;
   }
 
   static get TEMPORAL_NAMESPACE(): string {
@@ -84,14 +110,44 @@ export class Config {
   static get MAX_CONTEXT_TOKENS(): number {
     const value = process.env.MAX_CONTEXT_TOKENS;
     if (!value) {
-      return 12000;
+      return 20400;
     }
-    
+
     const parsed = parseInt(value, 10);
     if (isNaN(parsed)) {
-      throw new Error(`MAX_CONTEXT_TOKENS must be a valid number, got: ${value}`);
+      throw new Error(
+        `MAX_CONTEXT_TOKENS must be a valid number, got: ${value}`,
+      );
     }
-    
+
+    return parsed;
+  }
+
+  static get MIN_TOOL_TOKENS(): number {
+    const value = process.env.MIN_TOOL_TOKENS;
+    if (!value) {
+      return 2040;
+    }
+
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+      throw new Error(`MIN_TOOL_TOKENS must be a valid number, got: ${value}`);
+    }
+
+    return parsed;
+  }
+
+  static get MAX_TOOL_TOKENS(): number {
+    const value = process.env.MAX_TOOL_TOKENS;
+    if (!value) {
+      return 128000;
+    }
+
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+      throw new Error(`MAX_TOOL_TOKENS must be a valid number, got: ${value}`);
+    }
+
     return parsed;
   }
 
